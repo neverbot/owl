@@ -2,7 +2,7 @@ package docker
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/neverbot/owl/internal/scrape"
@@ -76,7 +76,7 @@ func (d *Discovery) Run(ctx context.Context, out chan<- []scrape.Target) {
 	send := func() {
 		targets, err := d.scan(ctx)
 		if err != nil {
-			log.Printf("docker discovery: %v", err)
+			slog.Error("docker discovery failed", "err", err)
 			return
 		}
 		select {
@@ -124,7 +124,8 @@ func (d *Discovery) toTarget(ct Container) (scrape.Target, bool) {
 	}
 	port := lbls[d.prefix+".port"]
 	if port == "" {
-		log.Printf("docker discovery: container %s opted in but missing %s.port", ct.Name(), d.prefix)
+		slog.Warn("docker discovery: opted-in container missing port label",
+			"container", ct.Name(), "label", d.prefix+".port")
 		return scrape.Target{}, false
 	}
 	path := lbls[d.prefix+".path"]

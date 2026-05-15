@@ -10,7 +10,7 @@ package alert
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -207,7 +207,7 @@ func (m *Manager) currentValue(r Rule) (float64, map[string]string, bool) {
 	from := now - m.interval.Milliseconds() - 60_000 // ~one step + 60 s of slack
 	res, err := m.q.QueryRange(r.Expr, from, now, m.interval.Milliseconds())
 	if err != nil {
-		log.Printf("alert %q: query: %v", r.Name, err)
+		slog.Error("alert query failed", "rule", r.Name, "err", err)
 		return 0, nil, false
 	}
 	if len(res.Series) == 0 || len(res.Series[0].Points) == 0 {
@@ -219,12 +219,13 @@ func (m *Manager) currentValue(r Rule) (float64, map[string]string, bool) {
 
 func (m *Manager) dispatch(ctx context.Context, e Event) {
 	if m.w == nil {
-		log.Printf("alert %s [%s]: value=%v threshold=%v (no webhook configured)",
-			e.Rule, e.Status, e.Value, e.Threshold)
+		slog.Warn("alert fired without webhook",
+			"rule", e.Rule, "status", e.Status,
+			"value", e.Value, "threshold", e.Threshold)
 		return
 	}
 	if err := m.w.Send(ctx, e); err != nil {
-		log.Printf("alert %s [%s]: webhook: %v", e.Rule, e.Status, err)
+		slog.Error("alert webhook failed", "rule", e.Rule, "status", e.Status, "err", err)
 	}
 }
 

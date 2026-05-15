@@ -3,7 +3,7 @@ package host
 import (
 	"context"
 	"io/fs"
-	"log"
+	"log/slog"
 	"os"
 	"time"
 
@@ -96,7 +96,7 @@ func (c *Collector) CollectOnce() {
 	for name, fn := range parsers() {
 		samples, err := fn(c.proc, now)
 		if err != nil {
-			log.Printf("host collector: %s: %v", name, err)
+			slog.Error("host parser failed", "source", name, "err", err)
 			continue
 		}
 		batch = append(batch, samples...)
@@ -105,7 +105,7 @@ func (c *Collector) CollectOnce() {
 		return
 	}
 	if err := c.app.Append(batch); err != nil {
-		log.Printf("host collector: append: %v", err)
+		slog.Error("host append failed", "err", err)
 	}
 }
 

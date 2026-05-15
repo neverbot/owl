@@ -2,7 +2,7 @@ package dashboards
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -63,12 +63,12 @@ func (l *Loader) Reload() error {
 
 		data, err := os.ReadFile(fullPath)
 		if err != nil {
-			log.Printf("dashboards: read %q: %v — skipping", fullPath, err)
+			slog.Warn("dashboards: read failed", "path", fullPath, "err", err)
 			continue
 		}
 		d, err := ParseDashboard(slug, data)
 		if err != nil {
-			log.Printf("dashboards: parse %q: %v — skipping", fullPath, err)
+			slog.Warn("dashboards: parse failed", "path", fullPath, "err", err)
 			continue
 		}
 		d.Source = fullPath

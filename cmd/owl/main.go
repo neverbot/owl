@@ -5,10 +5,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -56,9 +58,30 @@ func main() {
 		return
 	}
 
+	configureLogger(cfg.LogLevel)
 	if err := run(cfg, configPath); err != nil {
 		fail(err)
 	}
+}
+
+// configureLogger installs a structured-logging default. The text
+// handler keeps output readable in `docker logs` while still producing
+// key=value pairs that downstream log shippers can parse. Level
+// follows config (info, warn, debug, error); unknown values fall back
+// to info.
+func configureLogger(level string) {
+	var l slog.Level
+	switch strings.ToLower(level) {
+	case "debug":
+		l = slog.LevelDebug
+	case "warn", "warning":
+		l = slog.LevelWarn
+	case "error":
+		l = slog.LevelError
+	default:
+		l = slog.LevelInfo
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: l})))
 }
 
 func fail(err error) {
@@ -110,8 +133,7 @@ func run(cfg config.Config, configPath string) error {
 			Interval: cfg.Host.Interval,
 		})
 		spawn(func() { hostCol.Run(ctx) })
-		fmt.Fprintf(os.Stderr, "owl: host collector reading %s every %s\n",
-			cfg.Host.ProcPath, cfg.Host.Interval)
+		slog.Info("host collector started", "proc_path", cfg.Host.ProcPath, "interval", cfg.Host.Interval)
 	}
 
 	// Query engine (constructed early so both the alerter and the
@@ -139,8 +161,8 @@ func run(cfg config.Config, configPath string) error {
 		if cfg.Docker.Metrics.Enabled {
 			dockerCol := docker.NewCollector(dockerClient, store, cfg.Docker.Metrics.Interval)
 			spawn(func() { dockerCol.Run(ctx) })
-			fmt.Fprintf(os.Stderr, "owl: docker metrics collector reading %s every %s\n",
-				cfg.Docker.SocketPath, cfg.Docker.Metrics.Interval)
+			slog.Info("docker metrics collector started",
+				"socket", cfg.Docker.SocketPath, "interval", cfg.Docker.Metrics.Interval)
 		}
 
 		if cfg.Docker.Discovery.Enabled {
@@ -161,8 +183,8 @@ func run(cfg config.Config, configPath string) error {
 					scrapeMgr.Set(merged)
 				}
 			})
-			fmt.Fprintf(os.Stderr, "owl: docker discovery scanning for label %q every %s\n",
-				cfg.Docker.Discovery.LabelPrefix, cfg.Docker.Discovery.Interval)
+			slog.Info("docker discovery started",
+				"label", cfg.Docker.Discovery.LabelPrefix, "interval", cfg.Docker.Discovery.Interval)
 		}
 	}
 
@@ -176,7 +198,7 @@ func run(cfg config.Config, configPath string) error {
 	alerter := alert.New(engine, webhook, buildAlertRules(cfg), 0)
 	spawn(func() { alerter.Run(ctx) })
 	if n := len(cfg.Alerts.Rules); n > 0 {
-		fmt.Fprintf(os.Stderr, "owl: alerter evaluating %d rule(s)\n", n)
+		slog.Info("alerter started", "rules", n)
 	}
 
 	// Dashboard loader.
@@ -212,8 +234,10 @@ func run(cfg config.Config, configPath string) error {
 		yamlTargetsPtr.Store(&newYaml)
 		scrapeMgr.Set(newYaml)
 		alerter.SetRules(buildAlertRules(newCfg))
-		fmt.Fprintf(os.Stderr, "owl: reloaded — %d target(s), %d rule(s), %d dashboard(s)\n",
-			len(newYaml), len(newCfg.Alerts.Rules), len(dashLoader.List()))
+		slog.Info("reloaded",
+			"targets", len(newYaml),
+			"rules", len(newCfg.Alerts.Rules),
+			"dashboards", len(dashLoader.List()))
 		return nil
 	}
 
@@ -228,7 +252,7 @@ func run(cfg config.Config, configPath string) error {
 				return
 			case <-hup:
 				if err := reload(); err != nil {
-					fmt.Fprintf(os.Stderr, "owl: reload failed: %v\n", err)
+					slog.Error("reload failed", "err", err)
 				}
 			}
 		}
@@ -247,7 +271,7 @@ func run(cfg config.Config, configPath string) error {
 
 	httpErr := make(chan error, 1)
 	spawn(func() {
-		fmt.Fprintf(os.Stderr, "owl: %s\n", describeListen(cfg.Listen))
+		slog.Info(describeListen(cfg.Listen))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			httpErr <- err
 		}
@@ -255,7 +279,7 @@ func run(cfg config.Config, configPath string) error {
 
 	select {
 	case <-ctx.Done():
-		fmt.Fprintln(os.Stderr, "owl: shutting down")
+		slog.Info("shutting down")
 	case err := <-httpErr:
 		cancel()
 		return err
@@ -265,7 +289,7 @@ func run(cfg config.Config, configPath string) error {
 	defer shutdownCancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		// Returning is fine; the goroutine wait below still happens.
-		fmt.Fprintf(os.Stderr, "owl: http shutdown: %v\n", err)
+		slog.Error("http shutdown", "err", err)
 	}
 
 	// Wait for every collector / worker / handler to exit. Use a
@@ -275,9 +299,9 @@ func run(cfg config.Config, configPath string) error {
 	go func() { wg.Wait(); close(done) }()
 	select {
 	case <-done:
-		fmt.Fprintln(os.Stderr, "owl: clean shutdown")
+		slog.Info("clean shutdown")
 	case <-time.After(8 * time.Second):
-		fmt.Fprintln(os.Stderr, "owl: shutdown timed out — some goroutines did not exit")
+		slog.Warn("shutdown timed out — some goroutines did not exit")
 	}
 	return nil
 }

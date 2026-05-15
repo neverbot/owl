@@ -2,7 +2,7 @@ package docker
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -56,7 +56,7 @@ func (c *Collector) Run(ctx context.Context) {
 func (c *Collector) CollectOnce(ctx context.Context) {
 	containers, err := c.client.ListContainers(ctx)
 	if err != nil {
-		log.Printf("docker collector: list: %v", err)
+		slog.Error("docker list failed", "err", err)
 		return
 	}
 	if len(containers) == 0 {
@@ -79,7 +79,7 @@ func (c *Collector) CollectOnce(ctx context.Context) {
 			defer wg.Done()
 			stats, err := c.client.ContainerStats(ctx, ct.ID)
 			if err != nil {
-				log.Printf("docker collector: stats %s: %v", ct.Name(), err)
+				slog.Error("docker stats failed", "container", ct.Name(), "err", err)
 				return
 			}
 			results <- result{samples: containerSamples(ct, stats, now)}
@@ -95,7 +95,7 @@ func (c *Collector) CollectOnce(ctx context.Context) {
 		return
 	}
 	if err := c.app.Append(batch); err != nil {
-		log.Printf("docker collector: append: %v", err)
+		slog.Error("docker append failed", "err", err)
 	}
 }
 

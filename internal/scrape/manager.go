@@ -2,7 +2,7 @@ package scrape
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -121,7 +121,7 @@ func (m *Manager) runTarget(ctx context.Context, tgt Target) {
 	}
 
 	if err := ScrapeOnce(ctx, tgt, m.app); err != nil && ctx.Err() == nil {
-		log.Printf("scrape %s: %v", tgt.Name, err)
+		slog.Error("scrape failed", "target", tgt.Name, "err", err)
 	}
 
 	t := time.NewTicker(interval)
@@ -132,7 +132,7 @@ func (m *Manager) runTarget(ctx context.Context, tgt Target) {
 			return
 		case <-t.C:
 			if err := ScrapeOnce(ctx, tgt, m.app); err != nil && ctx.Err() == nil {
-				log.Printf("scrape %s: %v", tgt.Name, err)
+				slog.Error("scrape failed", "target", tgt.Name, "err", err)
 			}
 		}
 	}
