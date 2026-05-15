@@ -248,9 +248,53 @@ down.
 | `GET /api/dashboards` | List of dashboards |
 | `GET /api/dashboards/{id}` | One dashboard with its panels |
 | `GET /-/healthy` | `ok` on a healthy process |
+| `POST /-/reload` (also `GET`) | Re-read config.yml and dashboards/*.json; same effect as `SIGHUP` |
+| `GET /metrics` | owl's own metrics in Prometheus text exposition format |
 | `GET /static/*` | Embedded JS / CSS assets |
 
 Times are millisecond Unix timestamps.
+
+## Alerting
+
+Threshold rules in `config.yml` are evaluated against the query
+engine on a fixed interval and produce JSON events posted to the
+configured webhook on every state transition.
+
+```yaml
+alerts:
+  webhook_url: "https://hooks.example/abc"
+  rules:
+    - name: high_cpu
+      expr: "sum(rate(node_cpu_seconds_total{mode!=\"idle\"}[1m])) / count(node_cpu_seconds_total{mode=\"idle\"})"
+      op: ">"
+      threshold: 0.8
+      for: 2m
+    - name: low_disk
+      expr: "node_filesystem_avail_bytes"
+      op: "<"
+      threshold: 1073741824
+      for: 5m
+```
+
+Each rule has `op` (`>`, `>=`, `<`, `<=`), `threshold`, and a `for`
+duration the condition must hold before owl marks the rule firing.
+The webhook receives one `{"status":"firing", ...}` event when the
+rule fires and one `{"status":"resolved", ...}` once the condition
+clears — no duplicates while a rule stays in either state. The
+webhook URL is normally injected via `OWL_ALERT_WEBHOOK_URL` so it
+stays out of the YAML file.
+
+## Reload
+
+owl re-reads `config.yml` and `dashboards/*.json` atomically on:
+
+- `SIGHUP` to the process (`docker kill -s HUP owl`).
+- `POST /-/reload` (or `GET /-/reload` for the curl-from-browser
+  case).
+
+Dashboard JSON changes take effect immediately. Scrape targets and
+alert rules captured at startup currently require a restart — that
+will follow once a use case warrants the extra plumbing.
 
 ## Build targets and runtime profile
 
@@ -283,13 +327,18 @@ docker run --rm owl:dev --version
 
 ## Status
 
-Early. The pieces wired today are: configuration loader, SQLite
-storage with retention, runtime self-metrics, a Linux host collector
-(`/proc` parsing, opt-in), the HTTP scraper, the Docker integration
-(per-container metrics + label-based scrape-target discovery, opt-in),
-the PromQL subset documented above, the dashboard loader, and the web
-server that renders them. Threshold alerting and `SIGHUP`-driven
-config reload are not yet implemented.
+Early but useful. Wired today: configuration loader, SQLite storage
+with dual time+size retention, runtime self-metrics, a Linux host
+collector (`/proc` parsing, opt-in), the HTTP scraper, the Docker
+integration (per-container metrics + label-based scrape-target
+discovery, opt-in), the PromQL subset documented above, the dashboard
+loader, the web server that renders them, threshold alerting to a
+webhook, `SIGHUP` / `POST /-/reload` for live config and dashboard
+reload, and a self-observability `/metrics` endpoint.
+
+Not yet: structured logging (`slog`), `sync.WaitGroup`-driven graceful
+shutdown of every goroutine, live reload of scrape targets and alert
+rules (today they capture the YAML at startup).
 
 ### Docker socket permission
 
