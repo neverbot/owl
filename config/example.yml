@@ -1,0 +1,35 @@
+# Owl example configuration.
+# See docs/superpowers/specs/2026-05-15-owl-architecture-design.md for the
+# field reference.
+
+listen: "127.0.0.1:9090"
+log_level: "info"
+
+storage:
+  path: "/var/lib/owl/owl.db"
+  retention:
+    time: 30d
+    size: 500MB
+
+scrape:
+  default_interval: 15s
+  default_timeout: 10s
+
+targets:
+  - name: traefik
+    url: "http://traefik:8082/metrics"
+    labels:
+      job: traefik
+
+discovery:
+  docker:
+    enabled: true
+    socket_path: "/var/run/docker.sock"
+    label_prefix: "owl.scrape"
+
+dashboards:
+  dir: "/etc/owl/dashboards"
+
+alerts:
+  # webhook_url is normally injected via OWL_ALERT_WEBHOOK_URL
+  rules: []
