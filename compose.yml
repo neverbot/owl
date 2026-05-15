@@ -14,7 +14,7 @@
 
 services:
   owl:
-    image: ghcr.io/neverbot/owl:master
+    image: ghcr.io/neverbot/owl:latest
     build:
       context: .
     container_name: owl
