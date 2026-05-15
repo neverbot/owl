@@ -102,3 +102,20 @@ func TestLoadValidatesRequiredFields(t *testing.T) {
 		t.Fatal("expected error for empty listen")
 	}
 }
+
+func TestLoadEmptyFileUsesDefaults(t *testing.T) {
+	// An empty or comment-only YAML file must not be a parse error: the
+	// caller gets a Config equal to Default(), which then passes Validate.
+	d := Default()
+
+	for _, body := range []string{"", "   \n  \n", "# only a comment\n"} {
+		path := writeTemp(t, "empty.yml", body)
+		got, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load(%q): %v", body, err)
+		}
+		if got.Listen != d.Listen || got.Storage.Path != d.Storage.Path {
+			t.Errorf("Load(%q) did not return defaults: %+v", body, got)
+		}
+	}
+}

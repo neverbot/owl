@@ -1,8 +1,10 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -20,9 +22,9 @@ func Load(path string) (Config, error) {
 	}
 
 	c := Default()
-	dec := yaml.NewDecoder(strings.NewReader(string(raw)))
+	dec := yaml.NewDecoder(bytes.NewReader(raw))
 	dec.KnownFields(true)
-	if err := dec.Decode(&c); err != nil && !errors.Is(err, errEOF()) {
+	if err := dec.Decode(&c); err != nil && !errors.Is(err, io.EOF) {
 		return Config{}, fmt.Errorf("parse config %s: %w", path, err)
 	}
 
@@ -67,8 +69,15 @@ func Validate(c *Config) error {
 	return nil
 }
 
-// UnmarshalYAML on RetentionPolicy allows "7d", "12h" for Time and
-// "100MB", "2GB" for Size.
+// UnmarshalYAML on RetentionPolicy accepts string values only: "7d", "12h"
+// for Time and "100MB", "2GB" for Size. Numeric YAML scalars are rejected
+// — durations and sizes must be expressed with explicit units to keep the
+// config readable.
+//
+// Note: the outer decoder's KnownFields(true) setting does not propagate
+// into custom UnmarshalYAML methods. A typo inside the retention mapping
+// (e.g. "tme" instead of "time") will be silently ignored here rather
+// than surfacing as an "unknown field" error.
 func (r *RetentionPolicy) UnmarshalYAML(node *yaml.Node) error {
 	// Accept either the mapping form or a structural decoding.
 	type raw struct {
@@ -135,7 +144,3 @@ func parseSize(s string) (int64, error) {
 	}
 	return strconv.ParseInt(s, 10, 64)
 }
-
-// errEOF returns yaml's io.EOF sentinel — kept indirect so swapping yaml
-// libraries later does not leak through.
-func errEOF() error { return nil } // io.EOF handled by the yaml package implicitly
