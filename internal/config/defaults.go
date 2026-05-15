@@ -26,6 +26,12 @@ func Default() Config {
 				LabelPrefix: "owl.scrape",
 			},
 		},
+		Host: HostConfig{
+			Enabled:  false,
+			ProcPath: "/proc",
+			SysPath:  "/sys",
+			Interval: 5 * time.Second,
+		},
 		Dashboards: DashboardsConfig{
 			Dir: "/etc/owl/dashboards",
 		},

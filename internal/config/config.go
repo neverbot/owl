@@ -11,6 +11,7 @@ type Config struct {
 	Scrape     ScrapeConfig     `yaml:"scrape"`
 	Targets    []TargetConfig   `yaml:"targets"`
 	Discovery  DiscoveryConfig  `yaml:"discovery"`
+	Host       HostConfig       `yaml:"host"`
 	Dashboards DashboardsConfig `yaml:"dashboards"`
 	Alerts     AlertsConfig     `yaml:"alerts"`
 }
@@ -56,6 +57,18 @@ type DockerDiscoveryConfig struct {
 	Enabled     bool   `yaml:"enabled"`
 	SocketPath  string `yaml:"socket_path"`
 	LabelPrefix string `yaml:"label_prefix"`
+}
+
+// HostConfig controls the optional Linux host collector that reads
+// /proc and /sys. When running owl in a container, these typically
+// point at bind-mounts (/host/proc, /host/sys). Disabled by default
+// so deployments where neither path is present do not log noisy
+// errors on every tick.
+type HostConfig struct {
+	Enabled  bool          `yaml:"enabled"`
+	ProcPath string        `yaml:"proc_path"`
+	SysPath  string        `yaml:"sys_path"`
+	Interval time.Duration `yaml:"interval,omitempty"`
 }
 
 // DashboardsConfig points at the directory containing dashboard JSON files.

@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/neverbot/owl/internal/collect/host"
 	rtcollect "github.com/neverbot/owl/internal/collect/runtime"
 	"github.com/neverbot/owl/internal/config"
 	"github.com/neverbot/owl/internal/dashboards"
@@ -84,6 +85,19 @@ func run(cfg config.Config) error {
 
 	collector := rtcollect.New(store, cfg.Scrape.DefaultInterval)
 	go collector.Run(ctx)
+
+	// Optional Linux host collector (/proc + /sys). Disabled by default
+	// because /proc does not exist on every platform owl might run on
+	// (macOS dev environments, distroless without bind-mounts, etc.).
+	if cfg.Host.Enabled {
+		hostCol := host.New(store, host.Options{
+			ProcPath: cfg.Host.ProcPath,
+			Interval: cfg.Host.Interval,
+		})
+		go hostCol.Run(ctx)
+		fmt.Fprintf(os.Stderr, "owl: host collector reading %s every %s\n",
+			cfg.Host.ProcPath, cfg.Host.Interval)
+	}
 
 	// HTTP scrape manager.
 	scrapeMgr := scrape.NewManager(store)
