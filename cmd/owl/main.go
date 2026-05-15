@@ -264,6 +264,7 @@ func run(cfg config.Config, configPath string) error {
 			Store:    store,
 			Engine:   engine,
 			Loader:   dashLoader,
+			Scrape:   scrapeMgr,
 			OnReload: reload,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,

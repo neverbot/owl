@@ -10,6 +10,7 @@ import (
 
 	"github.com/neverbot/owl/internal/dashboards"
 	"github.com/neverbot/owl/internal/query"
+	"github.com/neverbot/owl/internal/scrape"
 	"github.com/neverbot/owl/internal/storage"
 )
 
@@ -24,12 +25,21 @@ type Options struct {
 	Store  *storage.Store
 	Engine *query.Engine
 	Loader *dashboards.Loader
+	// Scrape exposes per-target health for /api/targets and /targets.
+	// nil disables those endpoints.
+	Scrape ScrapeHealth
 	// OnReload is invoked when a client POSTs to /-/reload (or the
 	// process receives SIGHUP; that wiring lives in cmd/owl). The
 	// hook is responsible for re-reading the config file and the
 	// dashboards directory and swapping them in atomically. If
 	// OnReload is nil, /-/reload returns 503 with a clear message.
 	OnReload func() error
+}
+
+// ScrapeHealth is the slice of scrape.Manager the web layer needs.
+// Defined as an interface so unit tests can plug a fake.
+type ScrapeHealth interface {
+	HealthSnapshot() []scrape.TargetHealth
 }
 
 // Server is an http.Handler routing all of Owl's HTTP traffic.
@@ -62,6 +72,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/query", s.apiQuery)
 	s.mux.HandleFunc("/api/dashboards/", s.apiDashboardByID)
 	s.mux.HandleFunc("/api/dashboards", s.apiDashboards)
+	s.mux.HandleFunc("/api/targets", s.apiTargets)
+	s.mux.HandleFunc("/targets", s.targetsView)
 	s.mux.HandleFunc("/d/", s.dashboardView)
 	s.mux.HandleFunc("/", s.indexOrStatic)
 }

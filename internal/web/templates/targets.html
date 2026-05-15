@@ -3,18 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>owl</title>
+  <title>targets — owl</title>
   <script>(function(){try{var t=localStorage.getItem('owl-theme');if(t!=='light'&&t!=='dark'){t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
   <link rel="stylesheet" href="/static/owl.css">
 </head>
 <body>
-  <div class="shell shell--narrow">
+  <div class="shell">
     <nav class="topbar">
       <a class="topbar__brand" href="/">owl</a>
       <div class="topbar__crumbs">
-        <span class="current">dashboards</span>
-        <span class="sep">·</span>
-        <a href="/targets">targets</a>
+        <a href="/">dashboards</a>
+        <span class="sep">/</span>
+        <span class="current">targets</span>
       </div>
       <button class="theme-toggle" data-theme-toggle aria-label="Toggle colour theme" type="button">
         <svg class="icon-sun" viewBox="0 0 16 16" aria-hidden="true">
@@ -32,28 +32,51 @@
         </svg>
         <svg class="icon-moon" viewBox="0 0 16 16" aria-hidden="true">
           <path d="M12.5 9.5a5.5 5.5 0 0 1-6-7.9c-2.7.7-4.7 3.1-4.7 6 0 3.4 2.8 6.2 6.2 6.2 2.9 0 5.3-2 6-4.7-.5.2-1 .4-1.5.4z" fill="currentColor"></path>
-        </svg>
+      </svg>
       </button>
     </nav>
 
-    <h1 class="page-title">dashboards</h1>
-    {{if .Items}}
-    <p class="page-hint">{{len .Items}} dashboard{{if ne (len .Items) 1}}s{{end}} loaded from <code>{{.DashboardsDir}}</code>.</p>
-    <ul class="dashboard-list">
-      {{range .Items}}
-      <li class="dashboard-list__item">
-        <a class="dashboard-list__link" href="/d/{{.ID}}">{{.Title}}</a>
-        <span class="dashboard-list__meta">{{.PanelCount}} panel{{if ne .PanelCount 1}}s{{end}}</span>
-      </li>
-      {{end}}
-    </ul>
+    <h1 class="page-title">scrape targets</h1>
+    {{if .Rows}}
+    <p class="page-hint">{{len .Rows}} active target{{if ne (len .Rows) 1}}s{{end}}.</p>
+    <table class="targets">
+      <thead>
+        <tr>
+          <th>name</th>
+          <th>endpoint</th>
+          <th>status</th>
+          <th>last scrape</th>
+          <th class="num">duration</th>
+          <th class="num">samples</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Rows}}
+        <tr class="t-row t-row--{{.Status}}">
+          <td>
+            <div class="t-name">{{.Name}}</div>
+            {{if .Job}}<div class="t-sub">job={{.Job}}</div>{{end}}
+          </td>
+          <td class="t-url">{{.URL}}</td>
+          <td>
+            <span class="t-status t-status--{{.Status}}">{{.Status}}</span>
+            {{if .Error}}<div class="t-err">{{.Error}}</div>{{end}}
+          </td>
+          <td>{{.LastScrape}}</td>
+          <td class="num">{{.Duration}}</td>
+          <td class="num">{{.Samples}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
     {{else}}
     <p class="empty">
-      <strong>No dashboards loaded.</strong><br>
-      Drop a Grafana-format JSON file into the directory configured as <code>dashboards.dir</code>{{if .DashboardsDir}} (currently <code>{{.DashboardsDir}}</code>){{end}}, then restart owl.
+      <strong>No active scrape targets.</strong><br>
+      Add <code>targets:</code> entries to <code>config.yml</code> or label
+      containers with <code>owl.scrape=true, owl.scrape.port=…</code> to
+      auto-discover them via Docker.
     </p>
     {{end}}
   </div>
-  <script src="/static/app.js"></script>
 </body>
 </html>
