@@ -143,10 +143,40 @@
 
   var SVG_NS = "http://www.w3.org/2000/svg";
   var SERIES_PALETTE_SIZE = 5;
-  var WINDOW_MS = 5 * 60 * 1000;
   var MIN_REFRESH_MS = 1000;
   var DEFAULT_REFRESH_MS = 5000;
   var PAD = { top: 8, right: 12, bottom: 16, left: 44 };
+
+  // Range picker — the chosen window applies to every panel on this
+  // dashboard. Persisted in localStorage so it survives reloads.
+  var RANGE_KEY = "owl-range";
+  var RANGE_OPTIONS = {
+    "5m":  5 * 60 * 1000,
+    "15m": 15 * 60 * 1000,
+    "1h":  60 * 60 * 1000,
+    "6h":  6 * 60 * 60 * 1000,
+    "24h": 24 * 60 * 60 * 1000,
+  };
+  function currentRangeKey() {
+    var stored;
+    try { stored = localStorage.getItem(RANGE_KEY); } catch (e) { /* ignore */ }
+    return RANGE_OPTIONS[stored] ? stored : "5m";
+  }
+  function currentWindowMs() {
+    return RANGE_OPTIONS[currentRangeKey()];
+  }
+  function bindRangePicker() {
+    var sel = document.querySelector("[data-range]");
+    if (!sel) return;
+    sel.value = currentRangeKey();
+    sel.addEventListener("change", function () {
+      try { localStorage.setItem(RANGE_KEY, sel.value); } catch (e) { /* ignore */ }
+      // Force every panel to repaint with the new window.
+      document.querySelectorAll(".panel").forEach(function (p) {
+        if (p.dataset.status !== "unsupported") refreshPanel(p);
+      });
+    });
+  }
 
   function el(name, attrs, text) {
     var node = document.createElementNS(SVG_NS, name);
@@ -465,7 +495,7 @@
     var refresh = parseInt(panel.dataset.refresh, 10) || DEFAULT_REFRESH_MS;
     var step = Math.max(Math.floor(refresh / 2), 1000);
     var to = Date.now();
-    var from = to - WINDOW_MS;
+    var from = to - currentWindowMs();
 
     fetch("/api/query?expr=" + encodeURIComponent(expr) +
           "&from=" + from + "&to=" + to + "&step=" + step)
@@ -542,6 +572,7 @@
 
   function init() {
     bindThemeToggle();
+    bindRangePicker();
     schedulePanels();
   }
   if (document.readyState === "loading") {
