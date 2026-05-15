@@ -198,7 +198,7 @@
   // panelStates[svg] = { seriesList, unit, geom..., cursorMs (or null) }
   var panelStates = new WeakMap();
 
-  function renderChart(svg, seriesList, unit) {
+  function renderChart(svg, seriesList, unit, legendTemplate) {
     clearChildren(svg);
     if (!seriesList.length) {
       panelStates.delete(svg);
@@ -312,6 +312,7 @@
     panelStates.set(svg, {
       seriesList: seriesList,
       unit: unit,
+      legendTemplate: legendTemplate || "",
       w: w, h: h,
       minX: minX, maxX: maxX,
       sx: sx, sy: sy,
@@ -349,14 +350,26 @@
       ? lo : lo - 1;
   }
 
-  // Derive a short legend label from a series.
-  function labelFor(ser) {
+  // Derive a short legend label from a series. Honours the panel's
+  // Grafana-style legendFormat (e.g. "{{name}}"). When no template is
+  // set, falls back to:
+  //   - the single remaining label's value (drop "job" and "instance"
+  //     which are usually the same across every series of a panel)
+  //   - "k=v k=v" when more than one label remains
+  //   - the metric name when the series carries no labels at all
+  function labelFor(ser, legendTemplate) {
     var labels = ser.labels || {};
+    if (legendTemplate) {
+      return legendTemplate.replace(/\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g, function (_, k) {
+        return labels[k] || "";
+      });
+    }
     var keys = Object.keys(labels).filter(function (k) {
       return k !== "job" && k !== "instance";
     });
     if (keys.length === 0) keys = Object.keys(labels);
     if (keys.length === 0) return ser.metric;
+    if (keys.length === 1) return labels[keys[0]];
     return keys.map(function (k) { return k + "=" + labels[k]; }).join(" ");
   }
 
@@ -390,7 +403,7 @@
         cx: state.sx(pt[0]).toFixed(1), cy: state.sy(pt[1]).toFixed(1),
         r: 3, class: "hover-point hover-point--" + slot
       }));
-      rows.push({ slot: slot, label: labelFor(s), value: pt[1], ts: pt[0] });
+      rows.push({ slot: slot, label: labelFor(s, state.legendTemplate), value: pt[1], ts: pt[0] });
     }
     if (!rows.length) return;
 
@@ -505,11 +518,13 @@
         var seriesList = (body.series || []).filter(function (s) {
           return s && s.points && s.points.length > 0;
         });
+        var legendTemplate = panel.dataset.legend || "";
+
         var svg = panel.querySelector(".panel__chart");
-        if (svg) renderChart(svg, seriesList, unit);
+        if (svg) renderChart(svg, seriesList, unit, legendTemplate);
 
         var legend = panel.querySelector(".panel__legend");
-        if (legend) renderLegend(legend, seriesList);
+        if (legend) renderLegend(legend, seriesList, legendTemplate);
 
         var valueEl = panel.querySelector(".panel__value");
         if (valueEl) {
@@ -531,7 +546,7 @@
       .catch(function () { /* network error — keep last render */ });
   }
 
-  function renderLegend(legendEl, seriesList) {
+  function renderLegend(legendEl, seriesList, legendTemplate) {
     clearChildren(legendEl);
     if (seriesList.length <= 1) return;
     for (var i = 0; i < seriesList.length; i++) {
@@ -543,7 +558,7 @@
       swatch.style.background = "var(--series-" + slot + ")";
       item.appendChild(swatch);
       var label = document.createElement("span");
-      label.textContent = labelFor(seriesList[i]);
+      label.textContent = labelFor(seriesList[i], legendTemplate);
       item.appendChild(label);
       legendEl.appendChild(item);
     }

@@ -19,6 +19,7 @@ type panelTemplateData struct {
 	ID       string
 	Title    string
 	Expr     string
+	Legend   string // Grafana-style template, e.g. "{{name}}"
 	Unit     string
 	Status   string
 	Reason   string
@@ -72,13 +73,16 @@ func buildDashboardData(d *dashboards.Dashboard) dashboardTemplateData {
 	panels := make([]panelTemplateData, 0, len(d.Panels))
 	for _, p := range d.Panels {
 		expr := ""
+		legend := ""
 		if len(p.Targets) > 0 {
 			expr = p.Targets[0].Expr
+			legend = p.Targets[0].LegendFormat
 		}
 		panels = append(panels, panelTemplateData{
 			ID:       p.ID,
 			Title:    p.Title,
 			Expr:     expr,
+			Legend:   legend,
 			Unit:     p.Unit,
 			Status:   p.Support.Status,
 			Reason:   p.Support.Reason,
