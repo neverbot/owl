@@ -13,10 +13,15 @@ type evaluator struct {
 	q    Querier
 	from int64 // ms
 	to   int64 // ms
+	step int64 // ms; 0 means "instant query, single point at to"
 }
 
 func newEvaluator(q Querier, from, to int64) *evaluator {
 	return &evaluator{q: q, from: from, to: to}
+}
+
+func newRangeEvaluator(q Querier, from, to, step int64) *evaluator {
+	return &evaluator{q: q, from: from, to: to, step: step}
 }
 
 // eval dispatches to the appropriate method based on node type.
@@ -100,39 +105,87 @@ func matchesAll(labels map[string]string, matchers []compiledMatcher) bool {
 	return true
 }
 
-// evalRate computes per-second rate from consecutive samples.
-// Counter resets (prev > curr) are detected and handled: the delta for that
-// interval is treated as just the current value (i.e. the counter started fresh).
+// evalRate computes per-second rate from consecutive samples in a
+// sliding window. For a range query (step > 0) it emits one rate per
+// step across [from, to]; for an instant query (step == 0) it emits a
+// single rate at to.
+//
+// Counter resets (prev > curr) are detected and handled: the delta for
+// that interval is treated as just the current value.
 func (e *evaluator) evalRate(n *RateNode) ([]storage.Series, error) {
 	windowMs := n.Window.Milliseconds()
-	// Extend from by the window so we fetch enough history.
+	// Extend from by the window so the first step has enough lookback.
 	extFrom := e.from - windowMs
 	if extFrom < 0 {
 		extFrom = 0
 	}
 
-	// Re-evaluate the inner selector over the extended range.
 	innerEv := &evaluator{q: e.q, from: extFrom, to: e.to}
 	inner, err := innerEv.eval(n.Expr)
 	if err != nil {
 		return nil, err
 	}
 
+	// Pick the evaluation timestamps: every `step` ms in [from, to], or
+	// just one point at `to` for instant queries.
+	var timestamps []int64
+	if e.step <= 0 {
+		timestamps = []int64{e.to}
+	} else {
+		for t := e.from; t <= e.to; t += e.step {
+			timestamps = append(timestamps, t)
+		}
+		// Always include the right edge.
+		if len(timestamps) == 0 || timestamps[len(timestamps)-1] != e.to {
+			timestamps = append(timestamps, e.to)
+		}
+	}
+
 	out := make([]storage.Series, 0, len(inner))
 	for _, s := range inner {
 		pts := s.Points
 		if len(pts) < 2 {
-			// Cannot compute a rate from a single point — skip.
 			continue
 		}
-		rate := computeRate(pts)
+		rated := make([]storage.Point, 0, len(timestamps))
+		for _, t := range timestamps {
+			window := samplesInWindow(pts, t-windowMs, t)
+			if len(window) < 2 {
+				continue
+			}
+			rated = append(rated, storage.Point{TS: t, Value: computeRate(window)})
+		}
+		if len(rated) == 0 {
+			continue
+		}
 		out = append(out, storage.Series{
 			Metric: s.Metric,
 			Labels: s.Labels,
-			Points: []storage.Point{{TS: pts[len(pts)-1].TS, Value: rate}},
+			Points: rated,
 		})
 	}
 	return out, nil
+}
+
+// samplesInWindow returns the subset of pts whose ts falls in [lo, hi]
+// (both ends inclusive, matching Prometheus's range-vector semantics).
+// Assumes pts is sorted by ts ascending.
+func samplesInWindow(pts []storage.Point, lo, hi int64) []storage.Point {
+	left, right := 0, len(pts)
+	for left < right {
+		mid := (left + right) / 2
+		if pts[mid].TS < lo {
+			left = mid + 1
+		} else {
+			right = mid
+		}
+	}
+	start := left
+	end := start
+	for end < len(pts) && pts[end].TS <= hi {
+		end++
+	}
+	return pts[start:end]
 }
 
 // computeRate calculates the per-second rate across all points,

@@ -36,10 +36,11 @@ func NewEngine(q Querier) *Engine {
 // defaultStep is used when the caller passes step == 0.
 const defaultStep int64 = 15_000 // 15 seconds in ms
 
-// QueryRange evaluates expr over [from, to] (millisecond epoch) and returns
-// the resulting series. step is the sample resolution in ms for aggregations
-// and rate; if step == 0, it defaults to 15000 (15 s). step is stored for
-// future use — the evaluator currently fetches raw points within the window.
+// QueryRange evaluates expr over [from, to] (millisecond epoch) and
+// returns the resulting series. step is the sample resolution in ms;
+// rate() slides its window at this step. If step == 0 it defaults to
+// 15000 (15 s). Gauge-style metrics (bare selectors, scalar arithmetic
+// over them) still return the raw stored points in the range.
 func (e *Engine) QueryRange(expr string, from, to, step int64) (Result, error) {
 	if step == 0 {
 		step = defaultStep
@@ -48,7 +49,7 @@ func (e *Engine) QueryRange(expr string, from, to, step int64) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	ev := newEvaluator(e.q, from, to)
+	ev := newRangeEvaluator(e.q, from, to, step)
 	series, err := ev.eval(node)
 	if err != nil {
 		return Result{}, err
