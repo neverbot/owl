@@ -110,7 +110,12 @@ func containerSamples(ct Container, st *Stats, now int64) []storage.Sample {
 			Labels: base, TS: now,
 			Value: float64(st.CPUStats.CPUUsage.TotalUsage) / 1e9,
 		},
-		// Memory usage minus cache, matching cAdvisor's working set.
+		// Memory usage minus inactive file cache, matching cAdvisor's
+		// "working set". Note this still includes the active page
+		// cache — for write-heavy containers like owl itself the
+		// kernel parks dirty pages in this metric and it looks like
+		// a steady leak. Use container_memory_anon_bytes for the
+		// honest "process anonymous memory" reading.
 		{
 			Metric: "container_memory_usage_bytes",
 			Labels: base, TS: now,
@@ -126,6 +131,13 @@ func containerSamples(ct Container, st *Stats, now int64) []storage.Sample {
 			Labels: base, TS: now,
 			Value: float64(st.Memory.Limit),
 		},
+	}
+	if anon, ok := anonMemory(st.Memory); ok {
+		out = append(out, storage.Sample{
+			Metric: "container_memory_anon_bytes",
+			Labels: base, TS: now,
+			Value: float64(anon),
+		})
 	}
 
 	// Network: one (rx, tx) pair per interface.
@@ -182,6 +194,22 @@ func withLabel(in map[string]string, k, v string) map[string]string {
 	}
 	out[k] = v
 	return out
+}
+
+// anonMemory returns the container's anonymous (non-file-cache)
+// memory and a boolean indicating whether any of the candidate
+// fields were present. cgroup v2 exposes this as "anon"; cgroup v1
+// uses "total_rss" or "rss". Subtracting the file cache here gives
+// the operator a metric that tracks the actual process footprint
+// instead of conflating it with kernel-side page caching of files
+// the container writes to.
+func anonMemory(m MemoryStats) (uint64, bool) {
+	for _, k := range []string{"anon", "total_rss", "rss"} {
+		if v, ok := m.Stats[k]; ok {
+			return v, true
+		}
+	}
+	return 0, false
 }
 
 // workingSet mimics cAdvisor's working_set definition:

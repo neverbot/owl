@@ -18,9 +18,11 @@ Prometheus + Grafana is too heavy and a SaaS funnel is the wrong shape.
   `host.enabled` in the config.
 - Optional Docker integration via the daemon socket: per-container
   CPU / memory / network / disk metrics (cAdvisor-compatible
-  `container_*` names) plus label-based scrape-target discovery (a
-  container labelled `owl.scrape=true, owl.scrape.port=9100` is
-  automatically scraped without editing `config.yml`).
+  `container_*` names, plus `container_memory_anon_bytes` that
+  excludes the kernel page cache and reflects the real process
+  footprint) plus label-based scrape-target discovery (a container
+  labelled `owl.scrape=true, owl.scrape.port=9100` is automatically
+  scraped without editing `config.yml`).
 - Stores time series in an embedded SQLite database with a dual
   retention policy: drop samples older than a time window, or once
   the database exceeds a size cap — whichever triggers first.

@@ -20,12 +20,13 @@
     {
       "id": 2,
       "type": "timeseries",
-      "title": "Memory usage",
+      "title": "Memory usage (anon)",
+      "description": "Anonymous process memory only — excludes the kernel page cache the cgroup attributes to the container.",
       "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
       "fieldConfig": { "defaults": { "unit": "bytes" } },
       "targets": [
         {
-          "expr": "sum by (name) (container_memory_usage_bytes)",
+          "expr": "sum by (name) (container_memory_anon_bytes)",
           "legendFormat": "{{name}}",
           "refId": "A"
         }

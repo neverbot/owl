@@ -122,3 +122,56 @@ func TestCollectOnceEmitsContainerMetrics(t *testing.T) {
 		t.Error("missing fs reads")
 	}
 }
+
+func TestAnonMemoryPrefersCgroupV2(t *testing.T) {
+	v, ok := anonMemory(MemoryStats{Stats: map[string]uint64{
+		"anon":      42,
+		"total_rss": 99,
+	}})
+	if !ok || v != 42 {
+		t.Errorf("anon (cgroup v2): got (%d, %v), want (42, true)", v, ok)
+	}
+}
+
+func TestAnonMemoryFallsBackToCgroupV1(t *testing.T) {
+	v, ok := anonMemory(MemoryStats{Stats: map[string]uint64{
+		"total_rss":     99,
+		"inactive_file": 10,
+	}})
+	if !ok || v != 99 {
+		t.Errorf("anon (cgroup v1): got (%d, %v), want (99, true)", v, ok)
+	}
+}
+
+func TestAnonMemoryAbsentWhenStatsMissing(t *testing.T) {
+	if v, ok := anonMemory(MemoryStats{Stats: map[string]uint64{}}); ok {
+		t.Errorf("anon absent: got (%d, true), want (_, false)", v)
+	}
+}
+
+func TestCollectOnceEmitsAnonMemoryWhenAvailable(t *testing.T) {
+	d := &fakeDocker{
+		containers: []Container{{ID: "abc", Names: []string{"/owl"}, State: "running"}},
+		stats: map[string]*Stats{
+			"abc": {
+				Memory: MemoryStats{
+					Usage: 10 * 1024 * 1024,
+					Stats: map[string]uint64{"anon": 3 * 1024 * 1024},
+				},
+			},
+		},
+	}
+	app := &fakeAppender{}
+	c := NewCollector(d, app, time.Millisecond)
+	c.CollectOnce(context.Background())
+
+	for _, s := range app.snapshot() {
+		if s.Metric == "container_memory_anon_bytes" {
+			if s.Value != float64(3*1024*1024) {
+				t.Errorf("anon = %v, want %d", s.Value, 3*1024*1024)
+			}
+			return
+		}
+	}
+	t.Error("container_memory_anon_bytes not emitted")
+}
