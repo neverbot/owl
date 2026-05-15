@@ -13,6 +13,7 @@ import (
 
 	rtcollect "github.com/neverbot/owl/internal/collect/runtime"
 	"github.com/neverbot/owl/internal/config"
+	"github.com/neverbot/owl/internal/scrape"
 	"github.com/neverbot/owl/internal/storage"
 	"github.com/neverbot/owl/internal/version"
 	"github.com/neverbot/owl/internal/web"
@@ -81,6 +82,11 @@ func run(cfg config.Config) error {
 	collector := rtcollect.New(store, cfg.Scrape.DefaultInterval)
 	go collector.Run(ctx)
 
+	// HTTP scrape manager.
+	scrapeMgr := scrape.NewManager(store)
+	scrapeMgr.Set(buildTargets(cfg))
+	go scrapeMgr.Run(ctx)
+
 	srv := &http.Server{
 		Addr:              cfg.Listen,
 		Handler:           web.NewServer(web.Options{Store: store}),
@@ -106,6 +112,34 @@ func run(cfg config.Config) error {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 	return srv.Shutdown(shutdownCtx)
+}
+
+func buildTargets(cfg config.Config) []scrape.Target {
+	defInterval := cfg.Scrape.DefaultInterval
+	defTimeout := cfg.Scrape.DefaultTimeout
+	out := make([]scrape.Target, 0, len(cfg.Targets))
+	for _, t := range cfg.Targets {
+		interval := t.Interval
+		if interval <= 0 {
+			interval = defInterval
+		}
+		timeout := t.Timeout
+		if timeout <= 0 {
+			timeout = defTimeout
+		}
+		labels := map[string]string{}
+		for k, v := range t.Labels {
+			labels[k] = v
+		}
+		out = append(out, scrape.Target{
+			Name:     t.Name,
+			URL:      t.URL,
+			Interval: interval,
+			Timeout:  timeout,
+			Labels:   labels,
+		})
+	}
+	return out
 }
 
 func ensureDir(path string) error {
