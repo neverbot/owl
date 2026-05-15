@@ -5,6 +5,7 @@ package runtime
 
 import (
 	"context"
+	"math"
 	"runtime"
 	rtmetrics "runtime/metrics"
 	"time"
@@ -74,9 +75,17 @@ func (c *Collector) CollectOnce() {
 				break
 			}
 			lo, hi := h.Buckets[i], h.Buckets[i+1]
+			// Skip buckets with infinite boundaries to avoid NaN/Inf values
+			// that SQLite STRICT mode rejects as NOT NULL violations.
+			if math.IsInf(lo, 0) || math.IsInf(hi, 0) {
+				continue
+			}
 			mid := (lo + hi) / 2
 			gcPauseTotalMs += float64(count) * mid * 1000.0
 		}
+	}
+	if math.IsNaN(gcPauseTotalMs) || math.IsInf(gcPauseTotalMs, 0) {
+		gcPauseTotalMs = 0
 	}
 
 	batch := []storage.Sample{
