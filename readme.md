@@ -332,13 +332,17 @@ with dual time+size retention, runtime self-metrics, a Linux host
 collector (`/proc` parsing, opt-in), the HTTP scraper, the Docker
 integration (per-container metrics + label-based scrape-target
 discovery, opt-in), the PromQL subset documented above, the dashboard
-loader, the web server that renders them, threshold alerting to a
-webhook, `SIGHUP` / `POST /-/reload` for live config and dashboard
-reload, and a self-observability `/metrics` endpoint.
+loader (with Grafana-style `{{label}}` legend templating), the web
+server that renders them, threshold alerting to a webhook, `SIGHUP` /
+`POST /-/reload` for live reload of config / dashboards / scrape
+targets / alert rules, a self-observability `/metrics` endpoint,
+graceful shutdown that waits for every collector and worker to drain,
+and structured logging (`log/slog`) at a level chosen by
+`log_level` in the YAML or `OWL_LOG_LEVEL` in the env.
 
-Not yet: structured logging (`slog`), `sync.WaitGroup`-driven graceful
-shutdown of every goroutine, live reload of scrape targets and alert
-rules (today they capture the YAML at startup).
+The webhook URL and the listener address still take their value from
+the YAML at startup — changing them needs a process restart. Other
+than that, every subsystem updates live on reload.
 
 ### Docker socket permission
 
