@@ -47,6 +47,8 @@ Prometheus + Grafana is too heavy and a SaaS funnel is the wrong shape.
   last scrape time, sample count, duration and any error.
 - Atomic live reload of config, dashboards, scrape targets, alert
   rules and the alert webhook URL via `SIGHUP` or `POST /-/reload`.
+  Optional mtime-based dashboards watcher (off by default) auto-
+  reloads JSON edits without a signal.
 - Structured logging through `log/slog` at the level configured by
   `log_level` (info / debug / warn / error). Graceful shutdown that
   waits for every collector and worker to drain before exiting.
@@ -108,6 +110,8 @@ targets:
 
 dashboards:
   dir: "/etc/owl/dashboards"
+  # watch: true        # poll *.json mtimes and reload on change
+  # watch_interval: 5s
 ```
 
 ## Configuration

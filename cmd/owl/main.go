@@ -246,6 +246,30 @@ func run(cfg config.Config, configPath string) error {
 		return nil
 	}
 
+	// Optional dashboards watcher. Polls *.json mtimes in
+	// `dashboards.dir` and triggers a reload when any change. Opt-in:
+	// owl does not poll your filesystem unless you ask. Defaults to a
+	// 5s interval if the user enables the watcher without setting one.
+	if cfg.Dashboards.Watch {
+		interval := cfg.Dashboards.WatchInterval
+		if interval <= 0 {
+			interval = 5 * time.Second
+		}
+		watcher := &dashboards.Watcher{
+			Dir:      cfg.Dashboards.Dir,
+			Interval: interval,
+			OnChange: func() error {
+				if err := dashLoader.Reload(); err != nil {
+					return err
+				}
+				slog.Info("dashboards changed, reloaded", "count", len(dashLoader.List()))
+				return nil
+			},
+		}
+		spawn(func() { watcher.Run(ctx) })
+		slog.Info("dashboards watcher started", "dir", cfg.Dashboards.Dir, "interval", interval)
+	}
+
 	// Wire SIGHUP to the same hook. SIGHUP is the conventional
 	// "re-read your config" signal on Unix.
 	hup := make(chan os.Signal, 1)

@@ -48,6 +48,10 @@ host:
 
 dashboards:
   dir: "/etc/owl/dashboards"
+  # Poll dashboards/*.json mtimes and reload on change. Off by
+  # default — owl does not watch your filesystem unless asked.
+  # watch: true
+  # watch_interval: 5s
 
 # Threshold-based alerting. The webhook URL is usually injected via
 # the OWL_ALERT_WEBHOOK_URL env var so it stays out of YAML. Each rule

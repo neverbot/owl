@@ -39,7 +39,9 @@ func Default() Config {
 			Interval: 5 * time.Second,
 		},
 		Dashboards: DashboardsConfig{
-			Dir: "/etc/owl/dashboards",
+			Dir:           "/etc/owl/dashboards",
+			Watch:         false,
+			WatchInterval: 5 * time.Second,
 		},
 	}
 }

@@ -82,9 +82,16 @@ type HostConfig struct {
 	Interval time.Duration `yaml:"interval,omitempty"`
 }
 
-// DashboardsConfig points at the directory containing dashboard JSON files.
+// DashboardsConfig points at the directory containing dashboard JSON
+// files. The optional watcher polls file mtimes and reloads when one
+// changes, so the operator can edit a panel and see it without
+// sending SIGHUP. Off by default; opt-in keeps the project's
+// "zero surprises" stance — nothing watches your filesystem unless
+// you ask.
 type DashboardsConfig struct {
-	Dir string `yaml:"dir"`
+	Dir           string        `yaml:"dir"`
+	Watch         bool          `yaml:"watch"`
+	WatchInterval time.Duration `yaml:"watch_interval"`
 }
 
 // AlertsConfig holds the webhook URL (typically injected from an env var)
