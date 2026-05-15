@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -110,7 +111,7 @@ func run(cfg config.Config) error {
 
 	httpErr := make(chan error, 1)
 	go func() {
-		fmt.Fprintf(os.Stderr, "owl: listening on http://%s\n", cfg.Listen)
+		fmt.Fprintf(os.Stderr, "owl: %s\n", describeListen(cfg.Listen))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			httpErr <- err
 		}
@@ -155,6 +156,26 @@ func buildTargets(cfg config.Config) []scrape.Target {
 		})
 	}
 	return out
+}
+
+// describeListen turns a bind address into a human-readable startup
+// message. When the bind is to a wildcard address (0.0.0.0, ::, or an
+// empty host), the address is not a clickable URL from outside the
+// process's own network namespace — printing it as one (especially
+// inside a container, where it's the default and most users land here)
+// is misleading. Specific binds (loopback, host IP, VPN IP) DO produce
+// a URL the operator can paste.
+func describeListen(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "listening on " + addr
+	}
+	switch host {
+	case "", "0.0.0.0", "::", "[::]":
+		return "listening on port " + port + " (all interfaces)"
+	default:
+		return "listening on http://" + addr
+	}
 }
 
 func ensureDir(path string) error {
