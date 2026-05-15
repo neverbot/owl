@@ -11,10 +11,13 @@ package alert
 import (
 	"context"
 	"log/slog"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/neverbot/owl/internal/query"
+	"github.com/neverbot/owl/internal/storage"
 )
 
 // Querier is the slice of query.Engine the alerter depends on. Defined
@@ -62,14 +65,25 @@ type Event struct {
 // Manager periodically evaluates a rule set against the query engine
 // and dispatches webhook events on state transitions. The rule set
 // can be replaced at runtime via SetRules (see /-/reload wiring).
+//
+// Each rule fans out across every series its expression returns: an
+// expression like `container_memory_usage_bytes > 1e9` produces one
+// independent alert per container, keyed by the series' labels. State
+// is therefore indexed by (rule name, series fingerprint).
 type Manager struct {
 	mu       sync.Mutex // guards rules and state
 	rules    []Rule
-	state    map[string]*ruleState
+	state    map[stateKey]*ruleState
 	q        Querier
 	w        Webhook
 	interval time.Duration
 	now      func() time.Time
+}
+
+// stateKey identifies a per-rule, per-series alert lineage.
+type stateKey struct {
+	rule string
+	fp   string
 }
 
 type ruleState struct {
@@ -99,7 +113,7 @@ func New(q Querier, w Webhook, rules []Rule, interval time.Duration) *Manager {
 	}
 	return &Manager{
 		rules:    rules,
-		state:    make(map[string]*ruleState, len(rules)),
+		state:    make(map[stateKey]*ruleState, len(rules)),
 		q:        q,
 		w:        w,
 		interval: interval,
@@ -122,18 +136,22 @@ func (m *Manager) Run(ctx context.Context) {
 	}
 }
 
-// SetRules replaces the rule set under a lock. State for rules that
-// remain (matched by Name) is preserved so a rule that's already
-// firing doesn't re-fire on every reload. State for rules that
+// SetRules replaces the rule set under a lock. Per-series state for
+// rules that remain (matched by Name) is preserved so an already-
+// firing alert doesn't re-fire on every reload. State for rules that
 // disappear is discarded.
 func (m *Manager) SetRules(rules []Rule) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.rules = append(m.rules[:0:0], rules...) // copy
-	keep := make(map[string]*ruleState, len(rules))
+	keepNames := make(map[string]struct{}, len(rules))
 	for _, r := range rules {
-		if st, ok := m.state[r.Name]; ok {
-			keep[r.Name] = st
+		keepNames[r.Name] = struct{}{}
+	}
+	keep := make(map[stateKey]*ruleState, len(m.state))
+	for k, st := range m.state {
+		if _, ok := keepNames[k.rule]; ok {
+			keep[k] = st
 		}
 	}
 	m.state = keep
@@ -150,71 +168,99 @@ func (m *Manager) EvaluateOnce(ctx context.Context) {
 }
 
 func (m *Manager) evaluateRule(ctx context.Context, r Rule) {
-	m.mu.Lock()
-	st, ok := m.state[r.Name]
+	series, ok := m.evaluate(r)
 	if !ok {
-		st = &ruleState{}
-		m.state[r.Name] = st
-	}
-	m.mu.Unlock()
-
-	value, labels, ok := m.currentValue(r)
-	if !ok {
-		// Query failed or returned no points; do not flip state. A
-		// transient query failure should not "resolve" an active alert.
+		// Query failed; do not flip any state. A transient query
+		// failure should not "resolve" active alerts.
 		return
 	}
-	st.lastValue = value
-
 	now := m.now()
-	crossed := compare(r.Op, value, r.Threshold)
-
-	switch {
-	case crossed && !st.fired:
-		// Threshold breached — start counting toward `For`.
-		if st.triggeredSince.IsZero() {
-			st.triggeredSince = now
+	for _, s := range series {
+		if len(s.Points) == 0 {
+			// This series exists in the result but carries no points
+			// in the window — treat like "no observation for this
+			// lineage", same conservative rule as a failed query.
+			continue
 		}
-		if now.Sub(st.triggeredSince) >= r.For {
-			st.fired = true
-			st.firedAt = now
+		value := s.Points[len(s.Points)-1].Value
+		fp := fingerprint(s.Labels)
+
+		m.mu.Lock()
+		key := stateKey{rule: r.Name, fp: fp}
+		st, exists := m.state[key]
+		if !exists {
+			st = &ruleState{}
+			m.state[key] = st
+		}
+		m.mu.Unlock()
+
+		st.lastValue = value
+		crossed := compare(r.Op, value, r.Threshold)
+
+		switch {
+		case crossed && !st.fired:
+			if st.triggeredSince.IsZero() {
+				st.triggeredSince = now
+			}
+			if now.Sub(st.triggeredSince) >= r.For {
+				st.fired = true
+				st.firedAt = now
+				m.dispatch(ctx, Event{
+					Rule: r.Name, Expr: r.Expr, Op: r.Op, Threshold: r.Threshold,
+					Value: value, Status: StatusFiring, Labels: s.Labels, FiredAt: now,
+				})
+			}
+		case !crossed && st.fired:
+			st.fired = false
+			st.triggeredSince = time.Time{}
 			m.dispatch(ctx, Event{
 				Rule: r.Name, Expr: r.Expr, Op: r.Op, Threshold: r.Threshold,
-				Value: value, Status: StatusFiring, Labels: labels, FiredAt: now,
+				Value: value, Status: StatusResolved, Labels: s.Labels,
+				FiredAt: st.firedAt, ResolvedAt: now,
 			})
+		case !crossed:
+			st.triggeredSince = time.Time{}
 		}
-	case !crossed && st.fired:
-		// Resolved.
-		st.fired = false
-		st.triggeredSince = time.Time{}
-		m.dispatch(ctx, Event{
-			Rule: r.Name, Expr: r.Expr, Op: r.Op, Threshold: r.Threshold,
-			Value: value, Status: StatusResolved, Labels: labels,
-			FiredAt: st.firedAt, ResolvedAt: now,
-		})
-	case !crossed:
-		// Below threshold; reset the count so a future breach starts
-		// from zero.
-		st.triggeredSince = time.Time{}
 	}
 }
 
-// currentValue evaluates the rule's expression as an instant-ish query
-// (most recent step worth of data) and returns the latest value of the
-// first series. Returns ok=false on query failure or empty result.
-func (m *Manager) currentValue(r Rule) (float64, map[string]string, bool) {
+// evaluate runs the rule's PromQL over a window wide enough to capture
+// at least one step's worth of data. Returns the series slice and a
+// boolean: ok=false on query error (caller should not flip state).
+// An empty slice with ok=true is fine — it just means the expression
+// produced nothing this cycle, which leaves all per-series state alone.
+func (m *Manager) evaluate(r Rule) ([]storage.Series, bool) {
 	now := m.now().UnixMilli()
 	from := now - m.interval.Milliseconds() - 60_000 // ~one step + 60 s of slack
 	res, err := m.q.QueryRange(r.Expr, from, now, m.interval.Milliseconds())
 	if err != nil {
 		slog.Error("alert query failed", "rule", r.Name, "err", err)
-		return 0, nil, false
+		return nil, false
 	}
-	if len(res.Series) == 0 || len(res.Series[0].Points) == 0 {
-		return 0, nil, false
+	return res.Series, true
+}
+
+// fingerprint serialises labels into a stable key. Empty labels return
+// "" so a single-series-no-labels rule still gets a state entry.
+func fingerprint(labels map[string]string) string {
+	if len(labels) == 0 {
+		return ""
 	}
-	s := res.Series[0]
-	return s.Points[len(s.Points)-1].Value, s.Labels, true
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for i, k := range keys {
+		if i > 0 {
+			b.WriteByte('\x00')
+		}
+		b.WriteString(k)
+		b.WriteByte('=')
+		b.WriteString(labels[k])
+	}
+	return b.String()
 }
 
 func (m *Manager) dispatch(ctx context.Context, e Event) {

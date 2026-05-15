@@ -208,6 +208,90 @@ func TestSetRulesAddsAndRemovesRules(t *testing.T) {
 	}
 }
 
+// multiQuerier returns several series with caller-supplied values and
+// labels, so we can drive fan-out scenarios.
+type multiQuerier struct {
+	series []storage.Series
+	err    error
+}
+
+func (m *multiQuerier) QueryRange(_ string, _, _, _ int64) (query.Result, error) {
+	if m.err != nil {
+		return query.Result{}, m.err
+	}
+	return query.Result{Series: append([]storage.Series(nil), m.series...)}, nil
+}
+
+func TestMultiSeriesFanOut(t *testing.T) {
+	now := time.Now()
+	mk := func(name string, v float64) storage.Series {
+		return storage.Series{
+			Metric: "mem",
+			Labels: map[string]string{"container": name},
+			Points: []storage.Point{{TS: now.UnixMilli(), Value: v}},
+		}
+	}
+	q := &multiQuerier{series: []storage.Series{
+		mk("alpha", 0.9), // crosses
+		mk("beta", 0.1),  // below
+		mk("gamma", 0.95),
+	}}
+	w := &capturingWebhook{}
+	rules := []Rule{{Name: "hi_mem", Expr: "mem", Op: ">", Threshold: 0.5, For: 0}}
+
+	cur := now
+	m := newManager(q, w, rules, func() time.Time { return cur })
+	m.EvaluateOnce(context.Background())
+
+	evs := w.all()
+	if len(evs) != 2 {
+		t.Fatalf("len(events) = %d, want 2 (alpha + gamma)", len(evs))
+	}
+	got := map[string]bool{}
+	for _, e := range evs {
+		if e.Status != StatusFiring {
+			t.Errorf("status = %q, want firing", e.Status)
+		}
+		got[e.Labels["container"]] = true
+	}
+	if !got["alpha"] || !got["gamma"] || got["beta"] {
+		t.Errorf("fired containers = %v, want {alpha, gamma}", got)
+	}
+
+	// beta crosses on the next cycle; alpha and gamma stay firing —
+	// no duplicates. Only one new event (beta).
+	q.series[1] = mk("beta", 0.7)
+	cur = cur.Add(time.Second)
+	m.EvaluateOnce(context.Background())
+	if got := len(w.all()); got != 3 {
+		t.Errorf("after beta crosses: %d events, want 3", got)
+	}
+
+	// alpha resolves on the next cycle — one resolved event.
+	q.series[0] = mk("alpha", 0.1)
+	cur = cur.Add(time.Second)
+	m.EvaluateOnce(context.Background())
+	evs = w.all()
+	if len(evs) != 4 {
+		t.Fatalf("after alpha resolves: %d events, want 4", len(evs))
+	}
+	last := evs[3]
+	if last.Status != StatusResolved || last.Labels["container"] != "alpha" {
+		t.Errorf("last event = %+v, want resolved alpha", last)
+	}
+}
+
+func TestFingerprintStableUnderKeyOrder(t *testing.T) {
+	a := fingerprint(map[string]string{"a": "1", "b": "2"})
+	b := fingerprint(map[string]string{"b": "2", "a": "1"})
+	if a != b {
+		t.Errorf("fingerprint not stable: %q vs %q", a, b)
+	}
+	if fingerprint(nil) != "" || fingerprint(map[string]string{}) != "" {
+		t.Errorf("empty labels should fingerprint to \"\"")
+	}
+}
+
 func TestCompareOps(t *testing.T) {
 	cases := []struct {
 		op   string
