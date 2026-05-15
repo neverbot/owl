@@ -26,7 +26,7 @@ func TestAppendAndQueryRoundTrip(t *testing.T) {
 		{Metric: "cpu_seconds_total", Labels: map[string]string{"job": "host", "cpu": "0"}, TS: ms(10), Value: 1.0},
 		{Metric: "cpu_seconds_total", Labels: map[string]string{"job": "host", "cpu": "0"}, TS: ms(20), Value: 2.0},
 		{Metric: "cpu_seconds_total", Labels: map[string]string{"job": "host", "cpu": "1"}, TS: ms(20), Value: 3.0},
-		{Metric: "mem_bytes",         Labels: map[string]string{"job": "host"},              TS: ms(20), Value: 99.0},
+		{Metric: "mem_bytes", Labels: map[string]string{"job": "host"}, TS: ms(20), Value: 99.0},
 	}
 	if err := s.Append(samples); err != nil {
 		t.Fatalf("Append: %v", err)

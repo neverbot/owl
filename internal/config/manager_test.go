@@ -40,7 +40,7 @@ func TestManagerSwapReplacesSnapshotAndNotifiesSubscribers(t *testing.T) {
 
 func TestManagerSwapNotifiesMultipleSubscribersAndIsNonBlockingForSlowOnes(t *testing.T) {
 	m := NewManager(Default())
-	chSlow := m.Subscribe()   // never drained
+	chSlow := m.Subscribe() // never drained
 	chFast := m.Subscribe()
 
 	var notified int32

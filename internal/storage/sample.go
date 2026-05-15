@@ -10,7 +10,7 @@ import (
 type Sample struct {
 	Metric string
 	Labels map[string]string
-	TS     int64   // Unix milliseconds
+	TS     int64 // Unix milliseconds
 	Value  float64
 }
 
