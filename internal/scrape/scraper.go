@@ -24,10 +24,11 @@ type Target struct {
 
 // ScrapeOnce performs one GET against tgt.URL with tgt.Timeout, parses
 // the response as Prometheus exposition format, and writes the resulting
-// samples to app. Each sample is enriched with the target's labels plus
+// samples to app. Returns the number of samples appended and any error
+// encountered. Each sample is enriched with the target's labels plus
 // instance=<host:port>, and timestamped at scrape time if the exposition
 // did not provide one.
-func ScrapeOnce(ctx context.Context, tgt Target, app storage.Appender) error {
+func ScrapeOnce(ctx context.Context, tgt Target, app storage.Appender) (int, error) {
 	timeout := tgt.Timeout
 	if timeout <= 0 {
 		timeout = 10 * time.Second
@@ -37,23 +38,23 @@ func ScrapeOnce(ctx context.Context, tgt Target, app storage.Appender) error {
 
 	req, err := http.NewRequestWithContext(rctx, http.MethodGet, tgt.URL, nil)
 	if err != nil {
-		return fmt.Errorf("build request: %w", err)
+		return 0, fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Accept", "text/plain;version=0.0.4")
 	req.Header.Set("User-Agent", "owl-scraper/0.0")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("do: %w", err)
+		return 0, fmt.Errorf("do: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status %d from %s", resp.StatusCode, tgt.URL)
+		return 0, fmt.Errorf("status %d from %s", resp.StatusCode, tgt.URL)
 	}
 
 	parsed, err := expfmt.Parse(resp.Body)
 	if err != nil {
-		return fmt.Errorf("parse %s: %w", tgt.URL, err)
+		return 0, fmt.Errorf("parse %s: %w", tgt.URL, err)
 	}
 
 	now := time.Now().UnixMilli()
@@ -74,9 +75,12 @@ func ScrapeOnce(ctx context.Context, tgt Target, app storage.Appender) error {
 		})
 	}
 	if len(batch) == 0 {
-		return nil
+		return 0, nil
 	}
-	return app.Append(batch)
+	if err := app.Append(batch); err != nil {
+		return 0, err
+	}
+	return len(batch), nil
 }
 
 // mergeLabels merges per-target labels with per-sample labels and adds

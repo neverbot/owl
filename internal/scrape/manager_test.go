@@ -75,3 +75,64 @@ func TestManagerReconcilesOnSet(t *testing.T) {
 		t.Error("target B was never hit after reconciliation")
 	}
 }
+
+func TestHealthSnapshotRecordsScrapeOutcome(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("up 1\nrequests_total 42\n"))
+	}))
+	defer srv.Close()
+
+	app := &fakeAppender{}
+	mgr := NewManager(app)
+	mgr.Set([]Target{
+		{Name: "ok", URL: srv.URL, Interval: 20 * time.Millisecond, Timeout: 200 * time.Millisecond},
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
+	defer cancel()
+	mgr.Run(ctx)
+
+	h := mgr.HealthSnapshot()
+	if len(h) != 1 {
+		t.Fatalf("len(health) = %d, want 1", len(h))
+	}
+	if h[0].Name != "ok" {
+		t.Errorf("name = %q", h[0].Name)
+	}
+	if h[0].LastError != "" {
+		t.Errorf("expected success, got error: %q", h[0].LastError)
+	}
+	if h[0].LastSamples != 2 {
+		t.Errorf("samples = %d, want 2", h[0].LastSamples)
+	}
+	if h[0].LastScrape.IsZero() {
+		t.Error("last_scrape should be set")
+	}
+	if h[0].Duration <= 0 {
+		t.Errorf("duration = %v, want > 0", h[0].Duration)
+	}
+}
+
+func TestHealthSnapshotRecordsErrors(t *testing.T) {
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	defer bad.Close()
+
+	mgr := NewManager(&fakeAppender{})
+	mgr.Set([]Target{
+		{Name: "broken", URL: bad.URL, Interval: 20 * time.Millisecond, Timeout: 200 * time.Millisecond},
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Millisecond)
+	defer cancel()
+	mgr.Run(ctx)
+
+	h := mgr.HealthSnapshot()
+	if len(h) != 1 || h[0].LastError == "" {
+		t.Fatalf("expected one entry with LastError set, got %+v", h)
+	}
+	if h[0].LastSamples != 0 {
+		t.Errorf("samples on error = %d, want 0", h[0].LastSamples)
+	}
+}

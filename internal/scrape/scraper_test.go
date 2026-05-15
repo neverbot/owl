@@ -40,7 +40,7 @@ func TestScrapeOnceWritesSamples(t *testing.T) {
 	app := &fakeAppender{}
 	tgt := Target{Name: "demo", URL: ts.URL, Timeout: time.Second, Labels: map[string]string{"job": "demo"}}
 
-	if err := ScrapeOnce(context.Background(), tgt, app); err != nil {
+	if _, err := ScrapeOnce(context.Background(), tgt, app); err != nil {
 		t.Fatalf("ScrapeOnce: %v", err)
 	}
 
@@ -68,7 +68,7 @@ func TestScrapeOnceErrorOnNon200(t *testing.T) {
 	defer ts.Close()
 
 	tgt := Target{Name: "bad", URL: ts.URL, Timeout: time.Second}
-	err := ScrapeOnce(context.Background(), tgt, &fakeAppender{})
+	_, err := ScrapeOnce(context.Background(), tgt, &fakeAppender{})
 	if err == nil {
 		t.Error("expected error on 500 response")
 	}
@@ -82,7 +82,7 @@ func TestScrapeOnceErrorOnTimeout(t *testing.T) {
 	defer ts.Close()
 
 	tgt := Target{Name: "slow", URL: ts.URL, Timeout: 50 * time.Millisecond}
-	err := ScrapeOnce(context.Background(), tgt, &fakeAppender{})
+	_, err := ScrapeOnce(context.Background(), tgt, &fakeAppender{})
 	if err == nil {
 		t.Error("expected timeout error")
 	}
