@@ -8,7 +8,7 @@
       "type": "timeseries",
       "title": "CPU usage",
       "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
-      "fieldConfig": { "defaults": { "unit": "" } },
+      "fieldConfig": { "defaults": { "unit": "cores" } },
       "targets": [
         {
           "expr": "sum by (mode) (rate(node_cpu_seconds_total{mode!=\"idle\"}[1m]))",
@@ -22,7 +22,7 @@
       "type": "timeseries",
       "title": "Load average",
       "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
-      "fieldConfig": { "defaults": { "unit": "" } },
+      "fieldConfig": { "defaults": { "unit": "load" } },
       "targets": [
         { "expr": "node_load1",  "legendFormat": "1m",  "refId": "A" },
         { "expr": "node_load5",  "legendFormat": "5m",  "refId": "B" },
@@ -62,7 +62,7 @@
       "type": "timeseries",
       "title": "Network — rx",
       "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
-      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "fieldConfig": { "defaults": { "unit": "Bps" } },
       "targets": [
         {
           "expr": "sum by (device) (rate(node_network_receive_bytes_total[1m]))",
@@ -76,7 +76,7 @@
       "type": "timeseries",
       "title": "Network — tx",
       "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
-      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "fieldConfig": { "defaults": { "unit": "Bps" } },
       "targets": [
         {
           "expr": "sum by (device) (rate(node_network_transmit_bytes_total[1m]))",
@@ -90,7 +90,7 @@
       "type": "timeseries",
       "title": "Disk read",
       "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
-      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "fieldConfig": { "defaults": { "unit": "Bps" } },
       "targets": [
         {
           "expr": "sum by (device) (rate(node_disk_read_bytes_total[1m]))",
@@ -104,7 +104,7 @@
       "type": "timeseries",
       "title": "Disk written",
       "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
-      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "fieldConfig": { "defaults": { "unit": "Bps" } },
       "targets": [
         {
           "expr": "sum by (device) (rate(node_disk_written_bytes_total[1m]))",

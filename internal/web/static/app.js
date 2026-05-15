@@ -40,6 +40,12 @@
         if (abs >= 1048576)    return (n / 1048576).toFixed(2)    + " MB";
         if (abs >= 1024)       return (n / 1024).toFixed(1)       + " KB";
         return n.toFixed(0) + " B";
+      case "Bps":
+      case "bytes/s":
+        if (abs >= 1073741824) return (n / 1073741824).toFixed(2) + " GB/s";
+        if (abs >= 1048576)    return (n / 1048576).toFixed(2)    + " MB/s";
+        if (abs >= 1024)       return (n / 1024).toFixed(1)       + " KB/s";
+        return n.toFixed(0) + " B/s";
       case "s":
         if (abs >= 3600) return (n / 3600).toFixed(2) + " h";
         if (abs >= 60)   return (n / 60).toFixed(2)   + " m";
@@ -47,6 +53,12 @@
       case "ms":
         if (abs >= 1000) return (n / 1000).toFixed(2) + " s";
         return n.toFixed(1) + " ms";
+      case "cores":
+        return n.toFixed(2) + " cores";
+      case "percent":
+        return (n * 100).toFixed(1) + " %";
+      case "load":
+        return n.toFixed(2);
     }
     if (abs >= 1e9) return (n / 1e9).toFixed(2) + "G";
     if (abs >= 1e6) return (n / 1e6).toFixed(2) + "M";
@@ -66,12 +78,23 @@
         if (abs >= 1048576)    return (n / 1048576).toFixed(prec)    + "M";
         if (abs >= 1024)       return (n / 1024).toFixed(prec)       + "K";
         return n.toFixed(prec);
+      case "Bps":
+      case "bytes/s":
+        if (abs >= 1073741824) return (n / 1073741824).toFixed(prec) + "G/s";
+        if (abs >= 1048576)    return (n / 1048576).toFixed(prec)    + "M/s";
+        if (abs >= 1024)       return (n / 1024).toFixed(prec)       + "K/s";
+        return n.toFixed(prec) + "/s";
       case "s":
         if (abs >= 60) return (n / 60).toFixed(prec) + "m";
         return n.toFixed(Math.max(prec, 1));
       case "ms":
         if (abs >= 1000) return (n / 1000).toFixed(prec) + "s";
         return n.toFixed(prec);
+      case "percent":
+        return (n * 100).toFixed(prec) + "%";
+      case "cores":
+      case "load":
+        return n.toFixed(Math.max(prec, 2));
     }
     if (abs >= 1e9) return (n / 1e9).toFixed(prec) + "G";
     if (abs >= 1e6) return (n / 1e6).toFixed(prec) + "M";
