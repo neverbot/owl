@@ -54,8 +54,9 @@
         if (abs >= 1000) return (n / 1000).toFixed(2) + " s";
         return n.toFixed(1) + " ms";
       case "cores":
+        return n.toFixed(2) + " cores";
       case "load":
-        // The header already shows the unit; the value stays plain.
+        // Load average is unitless by convention.
         return n.toFixed(2);
       case "percent":
         return (n * 100).toFixed(1) + " %";
@@ -363,6 +364,10 @@
     }
     if (!rows.length) return;
 
+    // Sort by value descending so the tooltip rows match the visual
+    // top-to-bottom order of the lines at the cursor position.
+    rows.sort(function (a, b) { return b.value - a.value; });
+
     // Tooltip — header (timestamp) + one row per series.
     var headerTs = rows[0].ts;
     var rowH = 13;
@@ -478,11 +483,19 @@
 
         var valueEl = panel.querySelector(".panel__value");
         if (valueEl) {
-          var first = seriesList[0];
-          var lastPt = first ? first.points[first.points.length - 1] : null;
-          var v = lastPt ? lastPt[1] : null;
-          valueEl.textContent = fmt(v, unit);
-          valueEl.classList.toggle("panel__value--placeholder", v === null);
+          // The headline value only makes sense when the panel has a
+          // single series. In multi-series panels we'd be picking one
+          // arbitrarily — the legend already carries that info, so we
+          // hide the readout entirely and let the chart speak.
+          var multi = seriesList.length > 1;
+          valueEl.classList.toggle("panel__value--hidden", multi);
+          if (!multi) {
+            var first = seriesList[0];
+            var lastPt = first ? first.points[first.points.length - 1] : null;
+            var v = lastPt ? lastPt[1] : null;
+            valueEl.textContent = fmt(v, unit);
+            valueEl.classList.toggle("panel__value--placeholder", v === null);
+          }
         }
       })
       .catch(function () { /* network error — keep last render */ });
