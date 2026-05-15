@@ -1,0 +1,11 @@
+.git
+.gitignore
+.dockerignore
+.claude/
+Dockerfile
+Makefile
+docs/
+*.md
+data/
+dist/
+coverage.txt
