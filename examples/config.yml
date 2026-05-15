@@ -1,0 +1,23 @@
+# Example config for the docker compose quickstart.
+#
+# Listens on all interfaces because the binary runs inside a container.
+# The compose file maps host port 9090 to the container.
+
+listen: "0.0.0.0:9090"
+
+storage:
+  path: "/data/owl.db"
+  retention:
+    time: 1h
+    size: 0
+
+scrape:
+  default_interval: 5s
+  default_timeout: 2s
+
+discovery:
+  docker:
+    enabled: false
+
+dashboards:
+  dir: "/etc/owl/dashboards"

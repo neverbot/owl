@@ -1,0 +1,31 @@
+# Quickstart for trying owl from a fresh clone of the repository.
+#
+#   docker compose up
+#
+# Then visit http://localhost:9090. By default this pulls the image
+# published to GitHub Container Registry. To rebuild from your local
+# checkout instead, run:
+#
+#   docker compose up --build
+#
+# The example config keeps a short retention window and writes the
+# SQLite database into a named volume, so removing the volume
+# (`docker compose down -v`) gives you a clean slate.
+
+services:
+  owl:
+    image: ghcr.io/neverbot/owl:master
+    build:
+      context: .
+    container_name: owl
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./examples/config.yml:/etc/owl/config.yml:ro
+      - ./dashboards:/etc/owl/dashboards:ro
+      - owl-data:/data
+    command: ["--config", "/etc/owl/config.yml"]
+    restart: unless-stopped
+
+volumes:
+  owl-data:
