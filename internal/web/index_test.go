@@ -43,7 +43,7 @@ func TestIndexEmptyState(t *testing.T) {
 		t.Fatalf("status = %d", rec.Code)
 	}
 	body := rec.Body.Bytes()
-	if !bytes.Contains(body, []byte("No dashboards found")) {
+	if !bytes.Contains(body, []byte("No dashboards loaded")) {
 		t.Error("index missing empty-state message")
 	}
 }

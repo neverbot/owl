@@ -35,7 +35,7 @@ type Server struct {
 
 // NewServer constructs the HTTP handler with all routes registered.
 func NewServer(opt Options) *Server {
-	tmpl := template.Must(template.ParseFS(templateFS, "templates/dashboard.html"))
+	tmpl := template.Must(template.ParseFS(templateFS, "templates/*.html"))
 	s := &Server{
 		mux:  http.NewServeMux(),
 		opt:  opt,

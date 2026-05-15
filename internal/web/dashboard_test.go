@@ -25,15 +25,16 @@ func TestDashboardViewRendersHTML(t *testing.T) {
 	}
 
 	checks := [][]byte{
-		[]byte("<h1>Alpha</h1>"),
-		[]byte(`class="panel"`),
+		[]byte(`class="page-title">Alpha</h1>`),
+		[]byte(`class="panel`),
 		[]byte(`data-expr="metric_a"`),
 		[]byte(`data-status="supported"`),
 		[]byte(`data-unit=`),
 		[]byte(`data-panel-id=`),
 		[]byte(`data-refresh=`),
-		[]byte(`<svg>`),
-		[]byte(`<span class="last">—</span>`),
+		[]byte(`class="panel__chart"`),
+		[]byte(`class="panel__value`),
+		[]byte(`data-theme-toggle`),
 	}
 	for _, want := range checks {
 		if !bytes.Contains(body, want) {

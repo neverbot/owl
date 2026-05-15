@@ -106,3 +106,9 @@ func (l *Loader) Get(id string) (*Dashboard, bool) {
 func (l *Loader) List() []*Dashboard {
 	return l.loadIndex().ordered
 }
+
+// Dir returns the directory the Loader was configured to read from.
+// Exposed for diagnostic copy on the homepage and in error messages.
+func (l *Loader) Dir() string {
+	return l.dir
+}

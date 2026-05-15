@@ -1,56 +1,46 @@
 package web
 
 import (
-	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/neverbot/owl/internal/dashboards"
 )
 
+// indexTemplateData is passed to templates/index.html.
+type indexTemplateData struct {
+	Items         []indexItem
+	DashboardsDir string
+}
+
+type indexItem struct {
+	ID         string
+	Title      string
+	PanelCount int
+}
+
 // serveIndex server-renders the homepage listing all known dashboards.
 func (s *Server) serveIndex(w http.ResponseWriter, r *http.Request) {
 	var list []*dashboards.Dashboard
+	var dir string
 	if s.opt.Loader != nil {
 		list = s.opt.Loader.List()
+		dir = s.opt.Loader.Dir()
+	}
+
+	items := make([]indexItem, 0, len(list))
+	for _, d := range list {
+		items = append(items, indexItem{
+			ID:         d.ID,
+			Title:      d.Title,
+			PanelCount: len(d.Panels),
+		})
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = fmt.Fprint(w, indexHead)
-
-	if len(list) == 0 {
-		_, _ = fmt.Fprintf(w, `<p class="hint">No dashboards found. Drop a Grafana JSON file into the <code>dashboards/</code> directory configured as <code>dashboards.dir</code>.</p>`)
-	} else {
-		var sb strings.Builder
-		sb.WriteString(`<ul class="dashboard-list">`)
-		for _, d := range list {
-			sb.WriteString(fmt.Sprintf(`<li><a href="/d/%s">%s</a> <span class="hint">(%d panels)</span></li>`,
-				d.ID, d.Title, len(d.Panels)))
-		}
-		sb.WriteString(`</ul>`)
-		_, _ = fmt.Fprint(w, sb.String())
+	if err := s.tmpl.ExecuteTemplate(w, "index.html", indexTemplateData{
+		Items:         items,
+		DashboardsDir: dir,
+	}); err != nil {
+		_ = err
 	}
-
-	_, _ = fmt.Fprint(w, indexTail)
 }
-
-const indexHead = `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>owl</title>
-  <link rel="stylesheet" href="/static/owl.css">
-  <style>.dashboard-list{list-style:none;padding:0;margin:0}.dashboard-list li{margin-bottom:0.75rem}.dashboard-list a{font-size:1.125rem;font-weight:500;text-decoration:none;color:var(--fg)}.dashboard-list a:hover{text-decoration:underline}</style>
-</head>
-<body>
-  <main>
-    <h1>owl</h1>
-    <p class="hint">Dashboards</p>
-`
-
-const indexTail = `
-  </main>
-</body>
-</html>
-`

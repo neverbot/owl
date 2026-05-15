@@ -3,18 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Title}} — owl</title>
+  <title>owl</title>
   <script>(function(){try{var t=localStorage.getItem('owl-theme');if(t!=='light'&&t!=='dark'){t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
   <link rel="stylesheet" href="/static/owl.css">
 </head>
 <body>
-  <div class="shell">
+  <div class="shell shell--narrow">
     <nav class="topbar">
       <a class="topbar__brand" href="/">owl</a>
       <div class="topbar__crumbs">
-        <a href="/">dashboards</a>
-        <span class="sep">/</span>
-        <span class="current">{{.Title}}</span>
+        <span class="current">dashboards</span>
       </div>
       <button class="theme-toggle" data-theme-toggle aria-label="Toggle colour theme" type="button">
         <svg class="icon-sun" viewBox="0 0 16 16" aria-hidden="true">
@@ -36,35 +34,23 @@
       </button>
     </nav>
 
-    <h1 class="page-title">{{.Title}}</h1>
-
-    <section class="panel-grid">
-      {{range .Panels}}
-      <article
-        class="panel{{if eq .Status "unsupported"}} panel--unsupported{{end}}"
-        data-panel-id="{{.ID}}"
-        data-expr="{{.Expr}}"
-        data-refresh="{{$.RefreshMS}}"
-        data-unit="{{.Unit}}"
-        data-status="{{.Status}}"
-        data-reason="{{.Reason}}"
-        style="grid-column:{{.ColStart}}/span {{.ColSpan}};grid-row:{{.RowStart}}/span {{.RowSpan}}">
-        <header class="panel__header">
-          <h2 class="panel__title">{{.Title}}</h2>
-          {{if .Unit}}<span class="panel__unit">{{.Unit}}</span>{{end}}
-        </header>
-        {{if eq .Status "unsupported"}}
-        <p class="panel__notice"><strong>Unsupported query.</strong> {{.Reason}}</p>
-        {{else}}
-        <svg class="panel__chart" aria-label="{{.Title}} chart"></svg>
-        <footer class="panel__footer">
-          <span class="panel__value panel__value--placeholder">—</span>
-          <div class="panel__legend"></div>
-        </footer>
-        {{end}}
-      </article>
+    <h1 class="page-title">dashboards</h1>
+    {{if .Items}}
+    <p class="page-hint">{{len .Items}} dashboard{{if ne (len .Items) 1}}s{{end}} loaded from <code>{{.DashboardsDir}}</code>.</p>
+    <ul class="dashboard-list">
+      {{range .Items}}
+      <li class="dashboard-list__item">
+        <a class="dashboard-list__link" href="/d/{{.ID}}">{{.Title}}</a>
+        <span class="dashboard-list__meta">{{.PanelCount}} panel{{if ne .PanelCount 1}}s{{end}}</span>
+      </li>
       {{end}}
-    </section>
+    </ul>
+    {{else}}
+    <p class="empty">
+      <strong>No dashboards loaded.</strong><br>
+      Drop a Grafana-format JSON file into the directory configured as <code>dashboards.dir</code>{{if .DashboardsDir}} (currently <code>{{.DashboardsDir}}</code>){{end}}, then restart owl.
+    </p>
+    {{end}}
   </div>
   <script src="/static/app.js"></script>
 </body>
