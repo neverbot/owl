@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -78,16 +79,27 @@ func run(cfg config.Config, configPath string) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
+	// wg tracks every long-running goroutine started below so we can
+	// wait for them on shutdown instead of letting the process exit
+	// while a writer is still mid-batch. `spawn` is the canonical
+	// idiom — `spawn(func() { x.Run(ctx) })` — and is used
+	// throughout `run`.
+	var wg sync.WaitGroup
+	spawn := func(fn func()) {
+		wg.Add(1)
+		go func() { defer wg.Done(); fn() }()
+	}
+
 	retention := &storage.Worker{
 		Store:    store,
 		Time:     cfg.Storage.Retention.Time,
 		Size:     cfg.Storage.Retention.Size,
 		Interval: 5 * time.Minute,
 	}
-	go retention.Run(ctx)
+	spawn(func() { retention.Run(ctx) })
 
 	collector := rtcollect.New(store, cfg.Scrape.DefaultInterval)
-	go collector.Run(ctx)
+	spawn(func() { collector.Run(ctx) })
 
 	// Optional Linux host collector (/proc + /sys). Disabled by default
 	// because /proc does not exist on every platform owl might run on
@@ -97,7 +109,7 @@ func run(cfg config.Config, configPath string) error {
 			ProcPath: cfg.Host.ProcPath,
 			Interval: cfg.Host.Interval,
 		})
-		go hostCol.Run(ctx)
+		spawn(func() { hostCol.Run(ctx) })
 		fmt.Fprintf(os.Stderr, "owl: host collector reading %s every %s\n",
 			cfg.Host.ProcPath, cfg.Host.Interval)
 	}
@@ -115,7 +127,7 @@ func run(cfg config.Config, configPath string) error {
 	var yamlTargetsPtr atomic.Pointer[[]scrape.Target]
 	yamlTargetsPtr.Store(&initial)
 	scrapeMgr.Set(initial)
-	go scrapeMgr.Run(ctx)
+	spawn(func() { scrapeMgr.Run(ctx) })
 
 	// Optional Docker integration: per-container metrics and / or
 	// label-based scrape-target discovery. Both share one HTTP-over-
@@ -126,7 +138,7 @@ func run(cfg config.Config, configPath string) error {
 
 		if cfg.Docker.Metrics.Enabled {
 			dockerCol := docker.NewCollector(dockerClient, store, cfg.Docker.Metrics.Interval)
-			go dockerCol.Run(ctx)
+			spawn(func() { dockerCol.Run(ctx) })
 			fmt.Fprintf(os.Stderr, "owl: docker metrics collector reading %s every %s\n",
 				cfg.Docker.SocketPath, cfg.Docker.Metrics.Interval)
 		}
@@ -139,8 +151,8 @@ func run(cfg config.Config, configPath string) error {
 				DefaultTimeout:  cfg.Scrape.DefaultTimeout,
 			})
 			snapshots := make(chan []scrape.Target, 4)
-			go disc.Run(ctx, snapshots)
-			go func() {
+			spawn(func() { disc.Run(ctx, snapshots) })
+			spawn(func() {
 				for found := range snapshots {
 					y := *yamlTargetsPtr.Load()
 					merged := make([]scrape.Target, 0, len(y)+len(found))
@@ -148,7 +160,7 @@ func run(cfg config.Config, configPath string) error {
 					merged = append(merged, found...)
 					scrapeMgr.Set(merged)
 				}
-			}()
+			})
 			fmt.Fprintf(os.Stderr, "owl: docker discovery scanning for label %q every %s\n",
 				cfg.Docker.Discovery.LabelPrefix, cfg.Docker.Discovery.Interval)
 		}
@@ -162,7 +174,7 @@ func run(cfg config.Config, configPath string) error {
 		webhook = alert.NewHTTPWebhook(cfg.Alerts.WebhookURL)
 	}
 	alerter := alert.New(engine, webhook, buildAlertRules(cfg), 0)
-	go alerter.Run(ctx)
+	spawn(func() { alerter.Run(ctx) })
 	if n := len(cfg.Alerts.Rules); n > 0 {
 		fmt.Fprintf(os.Stderr, "owl: alerter evaluating %d rule(s)\n", n)
 	}
@@ -209,7 +221,7 @@ func run(cfg config.Config, configPath string) error {
 	// "re-read your config" signal on Unix.
 	hup := make(chan os.Signal, 1)
 	signal.Notify(hup, syscall.SIGHUP)
-	go func() {
+	spawn(func() {
 		for {
 			select {
 			case <-ctx.Done():
@@ -220,7 +232,7 @@ func run(cfg config.Config, configPath string) error {
 				}
 			}
 		}
-	}()
+	})
 
 	srv := &http.Server{
 		Addr: cfg.Listen,
@@ -234,12 +246,12 @@ func run(cfg config.Config, configPath string) error {
 	}
 
 	httpErr := make(chan error, 1)
-	go func() {
+	spawn(func() {
 		fmt.Fprintf(os.Stderr, "owl: %s\n", describeListen(cfg.Listen))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			httpErr <- err
 		}
-	}()
+	})
 
 	select {
 	case <-ctx.Done():
@@ -251,7 +263,23 @@ func run(cfg config.Config, configPath string) error {
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
-	return srv.Shutdown(shutdownCtx)
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		// Returning is fine; the goroutine wait below still happens.
+		fmt.Fprintf(os.Stderr, "owl: http shutdown: %v\n", err)
+	}
+
+	// Wait for every collector / worker / handler to exit. Use a
+	// timeout: a stuck goroutine should not prevent the process from
+	// terminating eventually.
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+		fmt.Fprintln(os.Stderr, "owl: clean shutdown")
+	case <-time.After(8 * time.Second):
+		fmt.Fprintln(os.Stderr, "owl: shutdown timed out — some goroutines did not exit")
+	}
+	return nil
 }
 
 func buildTargets(cfg config.Config) []scrape.Target {
