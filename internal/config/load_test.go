@@ -23,8 +23,9 @@ targets:
     url: "http://traefik:8082/metrics"
     labels:
       job: traefik
-discovery:
-  docker:
+docker:
+  enabled: true
+  discovery:
     enabled: true
 dashboards:
   dir: "/etc/owl/dashboards"
@@ -69,13 +70,16 @@ func TestLoadMergesYAMLOnTopOfDefaults(t *testing.T) {
 	if len(c.Targets) != 1 || c.Targets[0].Name != "traefik" {
 		t.Errorf("Targets parsed incorrectly: %+v", c.Targets)
 	}
-	if !c.Discovery.Docker.Enabled {
-		t.Error("Discovery.Docker.Enabled should be true")
+	if !c.Docker.Enabled {
+		t.Error("Docker.Enabled should be true")
+	}
+	if !c.Docker.Discovery.Enabled {
+		t.Error("Docker.Discovery.Enabled should be true")
 	}
 
 	// Unset fields keep their default values:
-	if c.Discovery.Docker.SocketPath != "/var/run/docker.sock" {
-		t.Errorf("default SocketPath was not preserved: %q", c.Discovery.Docker.SocketPath)
+	if c.Docker.SocketPath != "/var/run/docker.sock" {
+		t.Errorf("default SocketPath was not preserved: %q", c.Docker.SocketPath)
 	}
 }
 

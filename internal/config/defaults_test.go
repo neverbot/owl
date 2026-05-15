@@ -24,11 +24,11 @@ func TestDefaultConfigInvariants(t *testing.T) {
 		t.Errorf("Scrape.DefaultTimeout (%v) must be positive and < DefaultInterval (%v)",
 			c.Scrape.DefaultTimeout, c.Scrape.DefaultInterval)
 	}
-	if c.Discovery.Docker.SocketPath == "" {
-		t.Error("Discovery.Docker.SocketPath must have a default")
+	if c.Docker.SocketPath == "" {
+		t.Error("Docker.SocketPath must have a default")
 	}
-	if c.Discovery.Docker.LabelPrefix == "" {
-		t.Error("Discovery.Docker.LabelPrefix must have a default")
+	if c.Docker.Discovery.LabelPrefix == "" {
+		t.Error("Docker.Discovery.LabelPrefix must have a default")
 	}
 	if c.Dashboards.Dir == "" {
 		t.Error("Dashboards.Dir must have a default")

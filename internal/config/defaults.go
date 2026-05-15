@@ -19,11 +19,17 @@ func Default() Config {
 			DefaultInterval: 15 * time.Second,
 			DefaultTimeout:  10 * time.Second,
 		},
-		Discovery: DiscoveryConfig{
-			Docker: DockerDiscoveryConfig{
+		Docker: DockerConfig{
+			Enabled:    false,
+			SocketPath: "/var/run/docker.sock",
+			Metrics: DockerMetricsConfig{
+				Enabled:  false,
+				Interval: 10 * time.Second,
+			},
+			Discovery: DockerDiscoveryConfig{
 				Enabled:     false,
-				SocketPath:  "/var/run/docker.sock",
 				LabelPrefix: "owl.scrape",
+				Interval:    30 * time.Second,
 			},
 		},
 		Host: HostConfig{

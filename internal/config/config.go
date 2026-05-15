@@ -10,7 +10,7 @@ type Config struct {
 	Storage    StorageConfig    `yaml:"storage"`
 	Scrape     ScrapeConfig     `yaml:"scrape"`
 	Targets    []TargetConfig   `yaml:"targets"`
-	Discovery  DiscoveryConfig  `yaml:"discovery"`
+	Docker     DockerConfig     `yaml:"docker"`
 	Host       HostConfig       `yaml:"host"`
 	Dashboards DashboardsConfig `yaml:"dashboards"`
 	Alerts     AlertsConfig     `yaml:"alerts"`
@@ -46,17 +46,28 @@ type TargetConfig struct {
 	Labels   map[string]string `yaml:"labels,omitempty"`
 }
 
-// DiscoveryConfig controls auto-discovery of targets via Docker labels.
-type DiscoveryConfig struct {
-	Docker DockerDiscoveryConfig `yaml:"docker"`
+// DockerConfig groups every Docker-related capability. Both the
+// per-container metrics collector and the label-based scrape-target
+// discovery share the same socket connection.
+type DockerConfig struct {
+	Enabled    bool                  `yaml:"enabled"`
+	SocketPath string                `yaml:"socket_path"`
+	Metrics    DockerMetricsConfig   `yaml:"metrics"`
+	Discovery  DockerDiscoveryConfig `yaml:"discovery"`
 }
 
-// DockerDiscoveryConfig holds the parameters for auto-discovering scrape
-// targets from Docker container labels.
+// DockerMetricsConfig controls the per-container metrics collector.
+type DockerMetricsConfig struct {
+	Enabled  bool          `yaml:"enabled"`
+	Interval time.Duration `yaml:"interval"`
+}
+
+// DockerDiscoveryConfig controls auto-discovery of scrape targets from
+// container labels (containers marked with LabelPrefix=true are scraped).
 type DockerDiscoveryConfig struct {
-	Enabled     bool   `yaml:"enabled"`
-	SocketPath  string `yaml:"socket_path"`
-	LabelPrefix string `yaml:"label_prefix"`
+	Enabled     bool          `yaml:"enabled"`
+	LabelPrefix string        `yaml:"label_prefix"`
+	Interval    time.Duration `yaml:"interval"`
 }
 
 // HostConfig controls the optional Linux host collector that reads

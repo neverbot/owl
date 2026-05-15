@@ -16,6 +16,7 @@ import (
 	rtcollect "github.com/neverbot/owl/internal/collect/runtime"
 	"github.com/neverbot/owl/internal/config"
 	"github.com/neverbot/owl/internal/dashboards"
+	"github.com/neverbot/owl/internal/docker"
 	"github.com/neverbot/owl/internal/query"
 	"github.com/neverbot/owl/internal/scrape"
 	"github.com/neverbot/owl/internal/storage"
@@ -101,8 +102,45 @@ func run(cfg config.Config) error {
 
 	// HTTP scrape manager.
 	scrapeMgr := scrape.NewManager(store)
-	scrapeMgr.Set(buildTargets(cfg))
+	yamlTargets := buildTargets(cfg)
+	scrapeMgr.Set(yamlTargets)
 	go scrapeMgr.Run(ctx)
+
+	// Optional Docker integration: per-container metrics and / or
+	// label-based scrape-target discovery. Both share one HTTP-over-
+	// Unix-socket client. Disabled by default so the binary works on
+	// hosts without a Docker daemon.
+	if cfg.Docker.Enabled {
+		dockerClient := docker.NewClient(cfg.Docker.SocketPath)
+
+		if cfg.Docker.Metrics.Enabled {
+			dockerCol := docker.NewCollector(dockerClient, store, cfg.Docker.Metrics.Interval)
+			go dockerCol.Run(ctx)
+			fmt.Fprintf(os.Stderr, "owl: docker metrics collector reading %s every %s\n",
+				cfg.Docker.SocketPath, cfg.Docker.Metrics.Interval)
+		}
+
+		if cfg.Docker.Discovery.Enabled {
+			disc := docker.NewDiscovery(dockerClient, docker.DiscoveryOptions{
+				Prefix:          cfg.Docker.Discovery.LabelPrefix,
+				Interval:        cfg.Docker.Discovery.Interval,
+				DefaultInterval: cfg.Scrape.DefaultInterval,
+				DefaultTimeout:  cfg.Scrape.DefaultTimeout,
+			})
+			snapshots := make(chan []scrape.Target, 4)
+			go disc.Run(ctx, snapshots)
+			go func() {
+				for found := range snapshots {
+					merged := make([]scrape.Target, 0, len(yamlTargets)+len(found))
+					merged = append(merged, yamlTargets...)
+					merged = append(merged, found...)
+					scrapeMgr.Set(merged)
+				}
+			}()
+			fmt.Fprintf(os.Stderr, "owl: docker discovery scanning for label %q every %s\n",
+				cfg.Docker.Discovery.LabelPrefix, cfg.Docker.Discovery.Interval)
+		}
+	}
 
 	// Query engine.
 	engine := query.NewEngine(store)
