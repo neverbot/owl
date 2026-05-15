@@ -17,7 +17,7 @@ type Capabilities interface {
 
 // Dashboard is Owl's in-memory representation of one Grafana dashboard.
 type Dashboard struct {
-	ID      string    // filename slug (e.g., "cluster-overview")
+	ID      string // filename slug (e.g., "cluster-overview")
 	Title   string
 	Panels  []Panel
 	Time    TimeRange     // default time range (may be zero)
@@ -29,7 +29,7 @@ type Dashboard struct {
 type Panel struct {
 	ID      string // Grafana panel id coerced to string
 	Title   string
-	Type    string  // raw type from JSON ("timeseries", "stat", "gauge", or other)
+	Type    string // raw type from JSON ("timeseries", "stat", "gauge", or other)
 	GridPos GridPos
 	Targets []Target
 	Unit    string       // fieldConfig.defaults.unit

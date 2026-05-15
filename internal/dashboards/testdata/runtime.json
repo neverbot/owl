@@ -1,0 +1,39 @@
+{
+  "title": "Runtime",
+  "refresh": "5s",
+  "time": {"from": "now-15m", "to": "now"},
+  "schemaVersion": 39,
+  "annotations": {"list": []},
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "goroutines",
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "targets": [
+        {"expr": "owl_runtime_goroutines", "legendFormat": "goroutines", "refId": "A"}
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "alloc bytes",
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+      "fieldConfig": {"defaults": {"unit": "bytes"}},
+      "targets": [
+        {"expr": "owl_runtime_alloc_bytes", "refId": "A"}
+      ]
+    },
+    {
+      "id": 3,
+      "type": "gauge",
+      "title": "GC pause",
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+      "fieldConfig": {"defaults": {"unit": "ms"}},
+      "targets": [
+        {"expr": "owl_runtime_gc_pause_total_ms", "legendFormat": "gc pause", "refId": "A"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "title": "Unknown Fields Test",
+  "schemaVersion": 39,
+  "uid": "abc123",
+  "version": 5,
+  "tags": ["test", "owl"],
+  "templating": {"list": []},
+  "annotations": {"list": []},
+  "links": [],
+  "panels": [
+    {
+      "id": "panel-99",
+      "type": "unknown-type",
+      "title": "mystery panel",
+      "description": "This type is not supported",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 9},
+      "fieldConfig": {
+        "defaults": {"unit": "percent"},
+        "overrides": []
+      },
+      "options": {"reduceOptions": {}},
+      "targets": [
+        {
+          "expr": "some_metric",
+          "legendFormat": "{{instance}}",
+          "refId": "A",
+          "interval": "1m"
+        }
+      ]
+    }
+  ]
+}
