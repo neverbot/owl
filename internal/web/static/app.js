@@ -198,7 +198,7 @@
   // panelStates[svg] = { seriesList, unit, geom..., cursorMs (or null) }
   var panelStates = new WeakMap();
 
-  function renderChart(svg, seriesList, unit, legendTemplate) {
+  function renderChart(svg, seriesList, unit, legendTemplate, domain) {
     clearChildren(svg);
     if (!seriesList.length) {
       panelStates.delete(svg);
@@ -211,7 +211,11 @@
     var innerW = w - PAD.left - PAD.right;
     var innerH = h - PAD.top - PAD.bottom;
 
-    // Extents.
+    // Extents. Y is always derived from the data; X uses the query
+    // window when supplied so the axis labels read "-1h … now"
+    // regardless of where the actual sample timestamps landed (gauge
+    // panels without rate() return raw scrape ticks that drift a few
+    // seconds from the requested window).
     var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     for (var i = 0; i < seriesList.length; i++) {
       var pts = seriesList[i].points;
@@ -226,6 +230,10 @@
     if (!isFinite(minX)) {
       panelStates.delete(svg);
       return;
+    }
+    if (domain && isFinite(domain.from) && isFinite(domain.to) && domain.to > domain.from) {
+      minX = domain.from;
+      maxX = domain.to;
     }
 
     // 5 % vertical breathing room so lines don't kiss the gridlines.
@@ -521,7 +529,7 @@
         var legendTemplate = panel.dataset.legend || "";
 
         var svg = panel.querySelector(".panel__chart");
-        if (svg) renderChart(svg, seriesList, unit, legendTemplate);
+        if (svg) renderChart(svg, seriesList, unit, legendTemplate, { from: from, to: to });
 
         var legend = panel.querySelector(".panel__legend");
         if (legend) renderLegend(legend, seriesList, legendTemplate);
