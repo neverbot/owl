@@ -30,6 +30,8 @@ func (e *evaluator) eval(node Node) ([]storage.Series, error) {
 		return e.evalAggregation(n)
 	case *BinaryOpNode:
 		return e.evalBinaryOp(n)
+	case *BinaryExprNode:
+		return e.evalBinaryExpr(n)
 	default:
 		return nil, fmt.Errorf("eval: unknown node type %T", node)
 	}
@@ -322,6 +324,110 @@ func (e *evaluator) evalBinaryOp(n *BinaryOpNode) ([]storage.Series, error) {
 		out[i] = storage.Series{Metric: s.Metric, Labels: s.Labels, Points: pts}
 	}
 	return out, nil
+}
+
+// evalBinaryExpr applies a binary op to two sub-expressions. Series
+// from the LHS are matched to series from the RHS by exact label set
+// (metric name dropped, per Prometheus convention). When one side has
+// a single series, it is broadcast against every series on the other.
+// Timestamps are aligned by exact-equal inner join; unaligned points
+// are dropped.
+func (e *evaluator) evalBinaryExpr(n *BinaryExprNode) ([]storage.Series, error) {
+	lhs, err := e.eval(n.LHS)
+	if err != nil {
+		return nil, err
+	}
+	rhs, err := e.eval(n.RHS)
+	if err != nil {
+		return nil, err
+	}
+	if len(lhs) == 0 || len(rhs) == 0 {
+		return nil, nil
+	}
+
+	// Index RHS by canonical label signature.
+	rhsByLabels := make(map[string]*storage.Series, len(rhs))
+	for i := range rhs {
+		rhsByLabels[labelSig(rhs[i].Labels)] = &rhs[i]
+	}
+
+	out := make([]storage.Series, 0, len(lhs))
+	for i := range lhs {
+		l := &lhs[i]
+		var r *storage.Series
+		if match, ok := rhsByLabels[labelSig(l.Labels)]; ok {
+			r = match
+		} else if len(rhs) == 1 {
+			// Broadcast: single-series RHS pairs with every LHS series.
+			r = &rhs[0]
+		} else {
+			continue
+		}
+
+		// Inner-join points by timestamp.
+		rByTs := make(map[int64]float64, len(r.Points))
+		for _, p := range r.Points {
+			rByTs[p.TS] = p.Value
+		}
+		pts := make([]storage.Point, 0, len(l.Points))
+		for _, p := range l.Points {
+			rv, ok := rByTs[p.TS]
+			if !ok {
+				continue
+			}
+			pts = append(pts, storage.Point{TS: p.TS, Value: applyBinExpr(n.Op, p.Value, rv)})
+		}
+		if len(pts) == 0 {
+			continue
+		}
+		out = append(out, storage.Series{
+			Metric: "", // Prometheus drops the metric name on binary ops.
+			Labels: l.Labels,
+			Points: pts,
+		})
+	}
+	return out, nil
+}
+
+// applyBinExpr is the series-on-series counterpart of applyBinOp.
+func applyBinExpr(op string, l, r float64) float64 {
+	switch op {
+	case "+":
+		return l + r
+	case "-":
+		return l - r
+	case "*":
+		return l * r
+	case "/":
+		if r == 0 {
+			return 0
+		}
+		return l / r
+	}
+	return l
+}
+
+// labelSig is the canonical "sorted k=v,k=v" signature used for
+// matching series across the two sides of a binary expression.
+func labelSig(labels map[string]string) string {
+	if len(labels) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var b []byte
+	for i, k := range keys {
+		if i > 0 {
+			b = append(b, ',')
+		}
+		b = append(b, k...)
+		b = append(b, '=')
+		b = append(b, labels[k]...)
+	}
+	return string(b)
 }
 
 func applyBinOp(op string, seriesVal, scalar float64, scalarLeft bool) float64 {

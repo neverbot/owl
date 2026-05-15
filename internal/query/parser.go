@@ -243,20 +243,24 @@ func (p *parser) parseExpr() (Node, error) {
 		return nil, err
 	}
 
-	// Optional binary op (scalar on right)
+	// Optional binary op. Right side may be a scalar (→ BinaryOpNode) or
+	// another expression (→ BinaryExprNode, series-on-series).
 	if isBinOpToken(p.cur.kind) {
 		op := p.cur.val
 		p.consume()
-		// Right side must be a scalar number, not another series expression.
-		if p.cur.kind != tokNumber {
-			return nil, fmt.Errorf("unsupported: series-on-series arithmetic (only scalar ops are supported)")
+		if p.cur.kind == tokNumber {
+			scalar, err := strconv.ParseFloat(p.cur.val, 64)
+			if err != nil {
+				return nil, fmt.Errorf("parse number %q: %w", p.cur.val, err)
+			}
+			p.consume()
+			return &BinaryOpNode{Op: op, Expr: lhs, Scalar: scalar, ScalarLeft: false}, nil
 		}
-		scalar, err := strconv.ParseFloat(p.cur.val, 64)
+		rhs, err := p.parseAtom()
 		if err != nil {
-			return nil, fmt.Errorf("parse number %q: %w", p.cur.val, err)
+			return nil, err
 		}
-		p.consume()
-		return &BinaryOpNode{Op: op, Expr: lhs, Scalar: scalar, ScalarLeft: false}, nil
+		return &BinaryExprNode{Op: op, LHS: lhs, RHS: rhs}, nil
 	}
 
 	return lhs, nil

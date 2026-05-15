@@ -100,8 +100,8 @@ func TestAPIQueryRejectsBadExpr(t *testing.T) {
 	s := NewServer(Options{Engine: eng})
 
 	rec := httptest.NewRecorder()
-	// empty string is unsupported
-	req := httptest.NewRequest(http.MethodGet, "/api/query?expr=metric1+%2B+metric2", nil)
+	// histogram_quantile is outside the supported PromQL subset.
+	req := httptest.NewRequest(http.MethodGet, "/api/query?expr=histogram_quantile(0.9)", nil)
 	s.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadRequest {

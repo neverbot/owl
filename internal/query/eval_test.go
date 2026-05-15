@@ -256,3 +256,61 @@ func TestEvalBinaryOpScalarLeft(t *testing.T) {
 		t.Errorf("want 25, got %v", series[0].Points[0].Value)
 	}
 }
+
+func TestEvalSeriesOnSeriesSubtraction(t *testing.T) {
+	q := newFakeQuerier()
+	q.addSeries("total", map[string]string{"job": "host"}, []storage.Point{
+		{TS: 1000, Value: 1000},
+		{TS: 2000, Value: 1000},
+	})
+	q.addSeries("avail", map[string]string{"job": "host"}, []storage.Point{
+		{TS: 1000, Value: 300},
+		{TS: 2000, Value: 250},
+	})
+
+	node, err := Parse("total - avail")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := newEvaluator(q, 0, 2000)
+	series, err := ev.eval(node)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(series) != 1 {
+		t.Fatalf("len(series) = %d, want 1", len(series))
+	}
+	pts := series[0].Points
+	if len(pts) != 2 {
+		t.Fatalf("len(points) = %d, want 2", len(pts))
+	}
+	if pts[0].Value != 700 || pts[1].Value != 750 {
+		t.Errorf("values = [%v, %v], want [700, 750]", pts[0].Value, pts[1].Value)
+	}
+}
+
+func TestEvalSeriesOnSeriesBroadcast(t *testing.T) {
+	// LHS has two devices, RHS has a single global series; broadcast.
+	q := newFakeQuerier()
+	q.addSeries("dev_bytes", map[string]string{"device": "sda"}, []storage.Point{{TS: 1000, Value: 200}})
+	q.addSeries("dev_bytes", map[string]string{"device": "sdb"}, []storage.Point{{TS: 1000, Value: 400}})
+	q.addSeries("total_bytes", map[string]string{}, []storage.Point{{TS: 1000, Value: 1000}})
+
+	node, err := Parse("dev_bytes / total_bytes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := newEvaluator(q, 0, 2000)
+	series, err := ev.eval(node)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(series) != 2 {
+		t.Fatalf("len(series) = %d, want 2", len(series))
+	}
+	for _, s := range series {
+		if len(s.Points) != 1 {
+			t.Fatalf("series %v has %d points, want 1", s.Labels, len(s.Points))
+		}
+	}
+}

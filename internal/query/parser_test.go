@@ -230,7 +230,6 @@ func TestParseBinaryOpScalarLeft(t *testing.T) {
 
 func TestParseUnsupported(t *testing.T) {
 	cases := []string{
-		"metric1 + metric2",       // series-on-series arithmetic
 		"histogram_quantile(0.9)", // unknown function
 		"",                        // empty input
 	}
@@ -239,6 +238,26 @@ func TestParseUnsupported(t *testing.T) {
 		if err == nil {
 			t.Errorf("Parse(%q): expected error, got nil", tc)
 		}
+	}
+}
+
+func TestParseSeriesOnSeries(t *testing.T) {
+	node, err := Parse("metric1 - metric2")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	b, ok := node.(*BinaryExprNode)
+	if !ok {
+		t.Fatalf("got %T, want *BinaryExprNode", node)
+	}
+	if b.Op != "-" {
+		t.Errorf("Op = %q, want -", b.Op)
+	}
+	if _, ok := b.LHS.(*SelectorNode); !ok {
+		t.Errorf("LHS = %T, want *SelectorNode", b.LHS)
+	}
+	if _, ok := b.RHS.(*SelectorNode); !ok {
+		t.Errorf("RHS = %T, want *SelectorNode", b.RHS)
 	}
 }
 

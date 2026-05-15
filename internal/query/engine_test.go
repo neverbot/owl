@@ -103,7 +103,6 @@ func TestEngineIsSupported(t *testing.T) {
 	unsupported := []string{
 		"histogram_quantile(0.9, rate(reqs_bucket[5m]))",
 		"",
-		"metric1 + metric2",
 	}
 	for _, expr := range unsupported {
 		ok, _ := eng.IsSupported(expr)

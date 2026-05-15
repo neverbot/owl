@@ -68,3 +68,18 @@ type BinaryOpNode struct {
 }
 
 func (*BinaryOpNode) nodeMarker() {}
+
+// BinaryExprNode applies a binary op to two sub-expressions
+// (series-on-series). Used when neither side is a numeric literal —
+// for example `node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes`.
+//
+// Matching is by exact label set (the metric name is dropped from the
+// output). When one side has a single series, it is broadcast against
+// every series of the other side.
+type BinaryExprNode struct {
+	Op  string
+	LHS Node
+	RHS Node
+}
+
+func (*BinaryExprNode) nodeMarker() {}
