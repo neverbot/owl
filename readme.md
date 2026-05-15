@@ -6,11 +6,13 @@ Prometheus + Grafana is too heavy and a SaaS funnel is the wrong shape.
 
 ## What it does today
 
-- Scrapes Prometheus-format `/metrics` endpoints on an interval, parses
-  the text exposition format, persists samples to SQLite.
+- Scrapes Prometheus-format `/metrics` endpoints on an interval,
+  parses the text exposition format, persists samples to SQLite.
 - Emits self-metrics from the Go runtime (`owl_runtime_goroutines`,
   `owl_runtime_alloc_bytes`, `owl_runtime_gc_pause_total_ms`) so the
-  binary always has something to show.
+  binary always has something to show, and exposes a
+  Prometheus-format `/metrics` endpoint that can be scraped by owl
+  itself or by an external Prometheus.
 - Optional Linux host collector reading `/proc` (CPU per mode, load
   average, memory, network, disk). Off by default, enabled per
   `host.enabled` in the config.
@@ -20,17 +22,28 @@ Prometheus + Grafana is too heavy and a SaaS funnel is the wrong shape.
   container labelled `owl.scrape=true, owl.scrape.port=9100` is
   automatically scraped without editing `config.yml`).
 - Stores time series in an embedded SQLite database with a dual
-  retention policy: drop samples older than a time window, or once the
-  database exceeds a size cap — whichever triggers first.
+  retention policy: drop samples older than a time window, or once
+  the database exceeds a size cap — whichever triggers first.
 - Loads dashboards as JSON files from a directory. The format is a
-  subset of Grafana's dashboard JSON, so a Grafana export can usually
-  be dropped in and rendered with a best-effort result.
+  subset of Grafana's dashboard JSON (including `{{label}}`
+  `legendFormat` templates), so a Grafana export can usually be
+  dropped in and rendered with a best-effort result.
 - Renders dashboards as server-rendered HTML at `/d/{id}`. A small
-  vanilla-JS layer polls the API per panel and draws primitive SVG
-  sparklines. No build pipeline, no SPA, no CDN.
-- Evaluates a useful subset of PromQL on the fly. Panels whose queries
-  fall outside the subset render with a clear "unsupported" message
-  instead of breaking the whole dashboard.
+  vanilla-JS layer polls the API per panel and draws SVG charts with
+  axes, a crosshair on hover, and a tooltip that lists series sorted
+  by value. Light/dark theme toggle and a time-window picker
+  (5m/15m/1h/6h/24h) sit in the top bar. No build pipeline, no SPA,
+  no CDN.
+- Evaluates a useful subset of PromQL on the fly. Panels whose
+  queries fall outside the subset render with a clear "unsupported"
+  message instead of breaking the whole dashboard.
+- Threshold alerting: rules in `config.yml` fire / resolve via a
+  webhook POST, with per-rule dedup and a configurable `for` hold.
+- Atomic live reload of config, dashboards, scrape targets and alert
+  rules via `SIGHUP` or `POST /-/reload`.
+- Structured logging through `log/slog` at the level configured by
+  `log_level` (info / debug / warn / error). Graceful shutdown that
+  waits for every collector and worker to drain before exiting.
 
 ## Try it from a clone
 
@@ -292,9 +305,24 @@ owl re-reads `config.yml` and `dashboards/*.json` atomically on:
 - `POST /-/reload` (or `GET /-/reload` for the curl-from-browser
   case).
 
-Dashboard JSON changes take effect immediately. Scrape targets and
-alert rules captured at startup currently require a restart — that
-will follow once a use case warrants the extra plumbing.
+The following take effect immediately:
+
+- Dashboard JSON files in `dashboards.dir`.
+- Explicit scrape targets in `targets:` (the scrape manager reconciles
+  per-target goroutines without dropping in-flight samples).
+- Alert rules in `alerts.rules` (existing rules keep their firing
+  state so a reload doesn't re-trigger a webhook).
+
+What still requires a restart:
+
+- `listen` — the HTTP server is constructed once.
+- `alerts.webhook_url` — the webhook client is constructed once.
+- `storage.path` and `storage.retention` settings — storage is opened
+  once.
+
+Reload validates the new YAML before applying any change. If the file
+is invalid, the in-memory config stays exactly as it was and the
+endpoint returns `500` with the parse error.
 
 ## Build targets and runtime profile
 
