@@ -13,6 +13,8 @@ import (
 
 	rtcollect "github.com/neverbot/owl/internal/collect/runtime"
 	"github.com/neverbot/owl/internal/config"
+	"github.com/neverbot/owl/internal/dashboards"
+	"github.com/neverbot/owl/internal/query"
 	"github.com/neverbot/owl/internal/scrape"
 	"github.com/neverbot/owl/internal/storage"
 	"github.com/neverbot/owl/internal/version"
@@ -87,9 +89,22 @@ func run(cfg config.Config) error {
 	scrapeMgr.Set(buildTargets(cfg))
 	go scrapeMgr.Run(ctx)
 
+	// Query engine.
+	engine := query.NewEngine(store)
+
+	// Dashboard loader.
+	dashLoader := dashboards.NewLoader(cfg.Dashboards.Dir, engine)
+	if err := dashLoader.Reload(); err != nil {
+		return fmt.Errorf("dashboards: %w", err)
+	}
+
 	srv := &http.Server{
-		Addr:              cfg.Listen,
-		Handler:           web.NewServer(web.Options{Store: store}),
+		Addr: cfg.Listen,
+		Handler: web.NewServer(web.Options{
+			Store:  store,
+			Engine: engine,
+			Loader: dashLoader,
+		}),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
