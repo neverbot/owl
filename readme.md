@@ -24,13 +24,41 @@ Prometheus + Grafana is too heavy and a SaaS funnel is the wrong shape.
   fall outside the subset render with a clear "unsupported" message
   instead of breaking the whole dashboard.
 
-## Quick start
+## Try it from a clone
 
 ```sh
-docker pull ghcr.io/neverbot/owl:master
+git clone https://github.com/neverbot/owl.git
+cd owl
+docker compose up
 ```
 
-Create a `config.yml`:
+Then browse to `http://localhost:9090/`. You should see the bundled
+**Owl Runtime** dashboard with three panels driven by the binary's own
+Go runtime metrics, updating every few seconds.
+
+`docker compose up` pulls
+[`ghcr.io/neverbot/owl:master`](https://github.com/neverbot/owl/pkgs/container/owl)
+by default. To rebuild from your local checkout instead — useful when
+hacking on the code — run `docker compose up --build`. `docker compose
+down -v` removes the data volume for a clean slate.
+
+## Deploying
+
+The published container image is the same artefact as the quickstart,
+just consumed directly:
+
+```sh
+docker run --rm -d \
+  --name owl \
+  -p 9090:9090 \
+  -v $PWD/config.yml:/etc/owl/config.yml:ro \
+  -v $PWD/dashboards:/etc/owl/dashboards:ro \
+  -v owl-data:/data \
+  ghcr.io/neverbot/owl:master \
+  --config /etc/owl/config.yml
+```
+
+A minimal `config.yml`:
 
 ```yaml
 listen: "0.0.0.0:9090"
@@ -54,22 +82,6 @@ targets:
 dashboards:
   dir: "/etc/owl/dashboards"
 ```
-
-Drop one or more dashboard JSON files in a directory (Grafana exports
-work):
-
-```sh
-docker run --rm -d \
-  --name owl \
-  -p 9090:9090 \
-  -v $PWD/config.yml:/etc/owl/config.yml:ro \
-  -v $PWD/dashboards:/etc/owl/dashboards:ro \
-  -v owl-data:/data \
-  ghcr.io/neverbot/owl:master \
-  --config /etc/owl/config.yml
-```
-
-Browse to `http://localhost:9090/`.
 
 ## Configuration
 
