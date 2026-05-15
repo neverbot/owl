@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/neverbot/owl/internal/query"
 	"github.com/neverbot/owl/internal/storage"
 )
 
@@ -23,6 +24,11 @@ func newStore(t *testing.T) *storage.Store {
 	return s
 }
 
+func newEngine(t *testing.T, st *storage.Store) *query.Engine {
+	t.Helper()
+	return query.NewEngine(st)
+}
+
 func TestAPIQueryReturnsSeriesJSON(t *testing.T) {
 	st := newStore(t)
 	now := time.Now().UnixMilli()
@@ -31,10 +37,11 @@ func TestAPIQueryReturnsSeriesJSON(t *testing.T) {
 		{Metric: "owl_runtime_goroutines", Labels: map[string]string{"job": "owl"}, TS: now, Value: 9},
 	})
 
-	s := NewServer(Options{Store: st})
+	eng := newEngine(t, st)
+	s := NewServer(Options{Store: st, Engine: eng})
 
 	rec := httptest.NewRecorder()
-	url := "/api/query?metric=owl_runtime_goroutines&from=0&to=" + strconv.FormatInt(now+1, 10)
+	url := "/api/query?expr=owl_runtime_goroutines&from=0&to=" + strconv.FormatInt(now+1, 10)
 	req := httptest.NewRequest(http.MethodGet, url, nil)
 	s.ServeHTTP(rec, req)
 
@@ -62,8 +69,9 @@ func TestAPIQueryReturnsSeriesJSON(t *testing.T) {
 	}
 }
 
-func TestAPIQueryRejectsMissingMetric(t *testing.T) {
-	s := NewServer(Options{Store: newStore(t)})
+func TestAPIQueryRejectsMissingExpr(t *testing.T) {
+	eng := newEngine(t, newStore(t))
+	s := NewServer(Options{Engine: eng})
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/query", nil)
@@ -75,13 +83,56 @@ func TestAPIQueryRejectsMissingMetric(t *testing.T) {
 }
 
 func TestAPIQueryRejectsNonGET(t *testing.T) {
-	s := NewServer(Options{Store: newStore(t)})
+	eng := newEngine(t, newStore(t))
+	s := NewServer(Options{Engine: eng})
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/query?metric=x", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/query?expr=x", nil)
 	s.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("status = %d, want 405", rec.Code)
+	}
+}
+
+func TestAPIQueryRejectsBadExpr(t *testing.T) {
+	eng := newEngine(t, newStore(t))
+	s := NewServer(Options{Engine: eng})
+
+	rec := httptest.NewRecorder()
+	// empty string is unsupported
+	req := httptest.NewRequest(http.MethodGet, "/api/query?expr=metric1+%2B+metric2", nil)
+	s.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestAPIQueryDefaultTimeRange(t *testing.T) {
+	st := newStore(t)
+	now := time.Now().UnixMilli()
+	// Write a point 1 second ago — should be within 5-min default window
+	_ = st.Append([]storage.Sample{
+		{Metric: "test_metric", Labels: map[string]string{}, TS: now - 1000, Value: 42},
+	})
+
+	eng := newEngine(t, st)
+	s := NewServer(Options{Store: st, Engine: eng})
+
+	// No from/to → defaults to [now-5min, now]
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/query?expr=test_metric", nil)
+	s.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		Series []struct{ Points [][]float64 }
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &got)
+	if len(got.Series) == 0 || len(got.Series[0].Points) == 0 {
+		t.Error("expected at least one point in default time range")
 	}
 }
