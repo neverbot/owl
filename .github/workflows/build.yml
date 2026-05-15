@@ -103,17 +103,7 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: false
 
-      # Each push to master replaces the manifest that :latest points
-      # at, leaving the previous one untagged in GHCR. Untagged
-      # versions accumulate indefinitely if nothing prunes them, so
-      # we delete every untagged version after publishing. The new
-      # image is the only tagged one (:latest), and its per-arch
-      # children are referenced by the manifest list — actions/delete-
-      # package-versions skips manifests that are still referenced.
-      - name: Delete untagged versions
-        uses: actions/delete-package-versions@v5
-        with:
-          package-name: owl
-          package-type: container
-          delete-only-untagged-versions: true
-          min-versions-to-keep: 0
+      # NB: previous master builds become untagged versions in GHCR.
+      # That is intentional — operators tracking :latest who hit a
+      # regression can still pin to any past digest for rollback,
+      # even if no human-friendly tag points at it anymore.
