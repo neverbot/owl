@@ -17,6 +17,11 @@ RUN CGO_ENABLED=0 go build \
 RUN mkdir -p /out/data
 
 FROM gcr.io/distroless/static-debian12:nonroot
+LABEL org.opencontainers.image.title="owl" \
+      org.opencontainers.image.description="Tiny, lightweight self-hosted observability" \
+      org.opencontainers.image.source="https://github.com/neverbot/owl" \
+      org.opencontainers.image.url="https://github.com/neverbot/owl" \
+      org.opencontainers.image.licenses="MIT"
 COPY --from=build /out/owl /usr/local/bin/owl
 COPY --from=build --chown=nonroot:nonroot /out/data /data
 USER nonroot:nonroot

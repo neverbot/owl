@@ -260,6 +260,8 @@ down.
 | `GET /api/query?expr=&from=&to=&step=` | Evaluate a PromQL expression and return series JSON |
 | `GET /api/dashboards` | List of dashboards |
 | `GET /api/dashboards/{id}` | One dashboard with its panels |
+| `GET /targets` | Server-rendered table of scrape targets and their last status |
+| `GET /api/targets` | Per-target health (URL, last scrape, duration, samples, last error) as JSON |
 | `GET /-/healthy` | `ok` on a healthy process |
 | `POST /-/reload` (also `GET`) | Re-read config.yml and dashboards/*.json; same effect as `SIGHUP` |
 | `GET /metrics` | owl's own metrics in Prometheus text exposition format |
@@ -335,6 +337,10 @@ endpoint returns `500` with the parse error.
   active RAM ≤ 40 MB, no external dependencies (no SaaS, no cloud
   sign-in, no telemetry).
 - Tested on Go 1.25 with the race detector on.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
 
 ## Building from source
 
