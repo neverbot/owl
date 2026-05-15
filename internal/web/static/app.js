@@ -54,11 +54,11 @@
         if (abs >= 1000) return (n / 1000).toFixed(2) + " s";
         return n.toFixed(1) + " ms";
       case "cores":
-        return n.toFixed(2) + " cores";
+      case "load":
+        // The header already shows the unit; the value stays plain.
+        return n.toFixed(2);
       case "percent":
         return (n * 100).toFixed(1) + " %";
-      case "load":
-        return n.toFixed(2);
     }
     if (abs >= 1e9) return (n / 1e9).toFixed(2) + "G";
     if (abs >= 1e6) return (n / 1e6).toFixed(2) + "M";
