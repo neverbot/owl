@@ -35,4 +35,5 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/-/healthy", s.healthy)
+	s.mux.HandleFunc("/api/query", s.apiQuery)
 }
