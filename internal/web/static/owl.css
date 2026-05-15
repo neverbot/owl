@@ -284,7 +284,7 @@ body {
 .panel__chart {
   display: block;
   width: 100%;
-  height: 110px;
+  height: 160px;
   overflow: visible;
 }
 .panel__chart .gridline { stroke: var(--grid-line); stroke-width: 1; }
@@ -300,6 +300,55 @@ body {
 .panel__chart .marker--3 { fill: var(--series-3); }
 .panel__chart .marker--4 { fill: var(--series-4); }
 .panel__chart .marker--5 { fill: var(--series-5); }
+
+/* Axis labels (rendered inside the SVG) */
+.panel__chart .axis-label {
+  fill: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+}
+.panel__chart .axis-label--y { text-anchor: end; dominant-baseline: middle; }
+.panel__chart .axis-label--x { dominant-baseline: alphabetic; }
+
+/* Hover overlay + crosshair + per-series point */
+.panel__chart .hover-overlay { fill: transparent; cursor: crosshair; }
+.panel__chart .crosshair {
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  pointer-events: none;
+}
+.panel__chart .hover-point {
+  pointer-events: none;
+  stroke-width: 1.5;
+  fill: var(--bg-elevated);
+}
+.panel__chart .hover-point--1 { stroke: var(--series-1); }
+.panel__chart .hover-point--2 { stroke: var(--series-2); }
+.panel__chart .hover-point--3 { stroke: var(--series-3); }
+.panel__chart .hover-point--4 { stroke: var(--series-4); }
+.panel__chart .hover-point--5 { stroke: var(--series-5); }
+
+/* Tooltip block (SVG-native) */
+.panel__chart .tooltip-bg {
+  fill: var(--bg-elevated);
+  stroke: var(--rule);
+  stroke-width: 1;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.06));
+}
+.panel__chart .tooltip-text {
+  fill: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  dominant-baseline: alphabetic;
+  pointer-events: none;
+}
+.panel__chart .tooltip-text--muted { fill: var(--muted); }
+.panel__chart .tooltip-swatch--1 { fill: var(--series-1); }
+.panel__chart .tooltip-swatch--2 { fill: var(--series-2); }
+.panel__chart .tooltip-swatch--3 { fill: var(--series-3); }
+.panel__chart .tooltip-swatch--4 { fill: var(--series-4); }
+.panel__chart .tooltip-swatch--5 { fill: var(--series-5); }
 
 .panel__footer {
   display: flex;
