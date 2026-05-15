@@ -49,7 +49,9 @@ const (
 )
 
 // Event is the webhook payload. One Event per state transition per
-// rule.
+// rule. ResolvedAt is a pointer so firing payloads can omit it cleanly
+// — `omitempty` on `time.Time` does not work because the encoder
+// never considers a struct zero "empty".
 type Event struct {
 	Rule       string            `json:"rule"`
 	Expr       string            `json:"expr"`
@@ -59,7 +61,7 @@ type Event struct {
 	Status     string            `json:"status"`
 	Labels     map[string]string `json:"labels,omitempty"`
 	FiredAt    time.Time         `json:"fired_at"`
-	ResolvedAt time.Time         `json:"resolved_at,omitempty"`
+	ResolvedAt *time.Time        `json:"resolved_at,omitempty"`
 }
 
 // Manager periodically evaluates a rule set against the query engine
@@ -134,6 +136,15 @@ func (m *Manager) Run(ctx context.Context) {
 			m.EvaluateOnce(ctx)
 		}
 	}
+}
+
+// SetWebhook swaps the delivery sink. nil disables delivery (the
+// alerter logs a warning instead of posting). Safe to call concurrently
+// with Run.
+func (m *Manager) SetWebhook(w Webhook) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.w = w
 }
 
 // SetRules replaces the rule set under a lock. Per-series state for
@@ -213,10 +224,11 @@ func (m *Manager) evaluateRule(ctx context.Context, r Rule) {
 		case !crossed && st.fired:
 			st.fired = false
 			st.triggeredSince = time.Time{}
+			resolvedAt := now
 			m.dispatch(ctx, Event{
 				Rule: r.Name, Expr: r.Expr, Op: r.Op, Threshold: r.Threshold,
 				Value: value, Status: StatusResolved, Labels: s.Labels,
-				FiredAt: st.firedAt, ResolvedAt: now,
+				FiredAt: st.firedAt, ResolvedAt: &resolvedAt,
 			})
 		case !crossed:
 			st.triggeredSince = time.Time{}
@@ -264,13 +276,16 @@ func fingerprint(labels map[string]string) string {
 }
 
 func (m *Manager) dispatch(ctx context.Context, e Event) {
-	if m.w == nil {
+	m.mu.Lock()
+	w := m.w
+	m.mu.Unlock()
+	if w == nil {
 		slog.Warn("alert fired without webhook",
 			"rule", e.Rule, "status", e.Status,
 			"value", e.Value, "threshold", e.Threshold)
 		return
 	}
-	if err := m.w.Send(ctx, e); err != nil {
+	if err := w.Send(ctx, e); err != nil {
 		slog.Error("alert webhook failed", "rule", e.Rule, "status", e.Status, "err", err)
 	}
 }

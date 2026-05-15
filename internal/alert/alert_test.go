@@ -138,8 +138,11 @@ func TestResolveOnceConditionClears(t *testing.T) {
 	if evs[0].Status != StatusFiring || evs[1].Status != StatusResolved {
 		t.Errorf("statuses = %q, %q", evs[0].Status, evs[1].Status)
 	}
-	if evs[1].ResolvedAt.IsZero() {
+	if evs[1].ResolvedAt == nil || evs[1].ResolvedAt.IsZero() {
 		t.Error("resolved event missing resolved_at")
+	}
+	if evs[0].ResolvedAt != nil {
+		t.Errorf("firing event must not carry resolved_at, got %v", *evs[0].ResolvedAt)
 	}
 }
 
@@ -289,6 +292,29 @@ func TestFingerprintStableUnderKeyOrder(t *testing.T) {
 	}
 	if fingerprint(nil) != "" || fingerprint(map[string]string{}) != "" {
 		t.Errorf("empty labels should fingerprint to \"\"")
+	}
+}
+
+func TestSetWebhookHotSwap(t *testing.T) {
+	q := &fakeQuerier{value: 0.9, ok: true}
+	rules := []Rule{{Name: "r", Expr: "x", Op: ">", Threshold: 0.5, For: 0}}
+
+	now := time.Now()
+	m := newManager(q, nil, rules, func() time.Time { return now })
+	m.EvaluateOnce(context.Background())
+
+	// No webhook attached yet — install one and verify subsequent
+	// transitions deliver to it. Resolved is the next observable
+	// transition because the rule already fired in memory.
+	w := &capturingWebhook{}
+	m.SetWebhook(w)
+	q.value = 0.1
+	now = now.Add(time.Second)
+	m.EvaluateOnce(context.Background())
+
+	evs := w.all()
+	if len(evs) != 1 || evs[0].Status != StatusResolved {
+		t.Fatalf("post-SetWebhook events = %+v, want one resolved", evs)
 	}
 }
 

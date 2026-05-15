@@ -234,6 +234,11 @@ func run(cfg config.Config, configPath string) error {
 		yamlTargetsPtr.Store(&newYaml)
 		scrapeMgr.Set(newYaml)
 		alerter.SetRules(buildAlertRules(newCfg))
+		var newWebhook alert.Webhook
+		if newCfg.Alerts.WebhookURL != "" {
+			newWebhook = alert.NewHTTPWebhook(newCfg.Alerts.WebhookURL)
+		}
+		alerter.SetWebhook(newWebhook)
 		slog.Info("reloaded",
 			"targets", len(newYaml),
 			"rules", len(newCfg.Alerts.Rules),
