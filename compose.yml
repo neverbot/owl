@@ -34,6 +34,20 @@ services:
       # state, not the OS's. See the readme for the full caveat.
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
+      # Docker socket: read-only is enough for the metrics collector
+      # and the label-based discovery. Granting write would let any
+      # process in the container manipulate the daemon — not what we
+      # want.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    # The Docker socket on Docker Desktop is owned by root:root (mode
+    # 0660). owl runs as the distroless `nonroot` user (UID 65532), so
+    # it needs the root group in its supplementary set to read the
+    # socket. On Linux production hosts the socket is typically
+    # root:docker; replace "0" with your host's docker group GID
+    # (often 999 on Debian/Ubuntu — check with `stat -c '%g'
+    # /var/run/docker.sock`).
+    group_add:
+      - "0"
     command: ["--config", "/etc/owl/config.yml"]
     restart: unless-stopped
 

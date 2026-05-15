@@ -15,9 +15,18 @@ scrape:
   default_interval: 5s
   default_timeout: 2s
 
-discovery:
-  docker:
-    enabled: false
+# Docker integration. Both features share one socket connection;
+# enable each one independently.
+docker:
+  enabled: true
+  socket_path: "/var/run/docker.sock"
+  metrics:
+    enabled: true
+    interval: 10s
+  discovery:
+    enabled: true
+    label_prefix: "owl.scrape"
+    interval: 30s
 
 # Linux host collector: reads /proc bind-mounted into the container.
 # On Docker Desktop (macOS / Windows) this surfaces the underlying

@@ -11,6 +11,14 @@ Prometheus + Grafana is too heavy and a SaaS funnel is the wrong shape.
 - Emits self-metrics from the Go runtime (`owl_runtime_goroutines`,
   `owl_runtime_alloc_bytes`, `owl_runtime_gc_pause_total_ms`) so the
   binary always has something to show.
+- Optional Linux host collector reading `/proc` (CPU per mode, load
+  average, memory, network, disk). Off by default, enabled per
+  `host.enabled` in the config.
+- Optional Docker integration via the daemon socket: per-container
+  CPU / memory / network / disk metrics (cAdvisor-compatible
+  `container_*` names) plus label-based scrape-target discovery (a
+  container labelled `owl.scrape=true, owl.scrape.port=9100` is
+  automatically scraped without editing `config.yml`).
 - Stores time series in an embedded SQLite database with a dual
   retention policy: drop samples older than a time window, or once the
   database exceeds a size cap — whichever triggers first.
@@ -277,11 +285,23 @@ docker run --rm owl:dev --version
 
 Early. The pieces wired today are: configuration loader, SQLite
 storage with retention, runtime self-metrics, a Linux host collector
-(`/proc` parsing, opt-in, off by default), HTTP scraper, the PromQL
-subset documented above, dashboard loader, and the web server that
-renders them. Container metrics from the Docker socket, target
-auto-discovery, threshold alerting, and `SIGHUP`-driven config reload
-are not yet implemented.
+(`/proc` parsing, opt-in), the HTTP scraper, the Docker integration
+(per-container metrics + label-based scrape-target discovery, opt-in),
+the PromQL subset documented above, the dashboard loader, and the web
+server that renders them. Threshold alerting and `SIGHUP`-driven
+config reload are not yet implemented.
+
+### Docker socket permission
+
+owl runs as the distroless `nonroot` user (UID 65532) and the Docker
+socket is typically owned by `root:root` on Docker Desktop and
+`root:docker` on Linux production hosts. The container needs to be a
+member of the socket's group to read it.
+
+The bundled `compose.yml` uses `group_add: ["0"]` which works on
+Docker Desktop. On a Linux server, replace `"0"` with your host's
+docker group GID — `stat -c '%g' /var/run/docker.sock` prints it
+(commonly `999` on Debian/Ubuntu).
 
 ### Host metrics caveat (macOS / Windows / Docker Desktop)
 
