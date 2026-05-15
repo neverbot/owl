@@ -1,11 +1,30 @@
 // Tiny single-file vanilla JS layer. No frameworks, no build pipeline.
 // Polls /api/query per panel and renders a minimal SVG sparkline.
 
-const REFRESH_MS = 2000;
 const WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+const MIN_REFRESH_MS = 1000;
+const DEFAULT_REFRESH_MS = 5000;
 
-function fmt(n) {
+function fmt(n, unit) {
   if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  if (unit === "bytes") {
+    const abs = Math.abs(n);
+    if (abs >= 1073741824) return (n / 1073741824).toFixed(2) + " GB";
+    if (abs >= 1048576) return (n / 1048576).toFixed(2) + " MB";
+    if (abs >= 1024) return (n / 1024).toFixed(2) + " KB";
+    return n.toFixed(0) + " B";
+  }
+  if (unit === "s") {
+    const abs = Math.abs(n);
+    if (abs >= 3600) return (n / 3600).toFixed(2) + " h";
+    if (abs >= 60) return (n / 60).toFixed(2) + " m";
+    return n.toFixed(3) + " s";
+  }
+  if (unit === "ms") {
+    if (Math.abs(n) >= 1000) return (n / 1000).toFixed(2) + " s";
+    return n.toFixed(1) + " ms";
+  }
+  // Generic fallback
   if (Math.abs(n) >= 1e9) return (n / 1e9).toFixed(2) + "G";
   if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(2) + "M";
   if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(2) + "k";
@@ -41,28 +60,65 @@ function renderSparkline(svg, points) {
 }
 
 async function refreshPanel(panel) {
-  const metric = panel.dataset.metric;
+  const status = panel.dataset.status;
+  if (status === "unsupported") return; // server already rendered the reason
+
+  const expr = panel.dataset.expr;
+  if (!expr) return;
+
+  const unit = panel.dataset.unit || "";
+  const step = Math.max(
+    Math.floor((parseInt(panel.dataset.refresh, 10) || DEFAULT_REFRESH_MS) / 2),
+    1000
+  );
   const to = Date.now();
   const from = to - WINDOW_MS;
+
   let resp;
   try {
-    resp = await fetch(`/api/query?metric=${encodeURIComponent(metric)}&from=${from}&to=${to}`);
+    resp = await fetch(
+      `/api/query?expr=${encodeURIComponent(expr)}&from=${from}&to=${to}&step=${step}`
+    );
   } catch (e) {
     return;
   }
   if (!resp.ok) return;
+
   const body = await resp.json();
   const series = (body.series || [])[0];
   const points = series ? series.points : [];
-  renderSparkline(panel.querySelector("svg"), points);
-  const last = points.length ? points[points.length - 1][1] : null;
-  panel.querySelector(".last").textContent = fmt(last);
+
+  const svg = panel.querySelector("svg");
+  if (svg) renderSparkline(svg, points);
+
+  const lastEl = panel.querySelector(".last");
+  if (lastEl) {
+    const last = points.length ? points[points.length - 1][1] : null;
+    lastEl.textContent = fmt(last, unit);
+  }
 }
 
-function tick() {
-  if (document.visibilityState === "hidden") return;
-  document.querySelectorAll(".panel").forEach(refreshPanel);
+// Schedule per-panel refresh using each panel's own data-refresh interval.
+function schedulePanels() {
+  document.querySelectorAll(".panel").forEach(panel => {
+    if (panel.dataset.status === "unsupported") return;
+
+    const refreshMs = Math.max(
+      parseInt(panel.dataset.refresh, 10) || DEFAULT_REFRESH_MS,
+      MIN_REFRESH_MS
+    );
+
+    // Immediate first fetch (only when visible)
+    if (document.visibilityState !== "hidden") {
+      refreshPanel(panel);
+    }
+
+    setInterval(() => {
+      if (document.visibilityState !== "hidden") {
+        refreshPanel(panel);
+      }
+    }, refreshMs);
+  });
 }
 
-tick();
-setInterval(tick, REFRESH_MS);
+schedulePanels();
