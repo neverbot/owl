@@ -293,11 +293,65 @@ alerts:
 
 Each rule has `op` (`>`, `>=`, `<`, `<=`), `threshold`, and a `for`
 duration the condition must hold before owl marks the rule firing.
-The webhook receives one `{"status":"firing", ...}` event when the
-rule fires and one `{"status":"resolved", ...}` once the condition
-clears — no duplicates while a rule stays in either state. The
-webhook URL is normally injected via `OWL_ALERT_WEBHOOK_URL` so it
+
+A rule **fans out across every series its expression returns**. The
+`low_disk` example above produces one independent alert per
+filesystem; `node_filesystem_avail_bytes{mountpoint="/"}` and
+`{mountpoint="/data"}` track separate firing/resolved lifecycles
+identified by their labels. The webhook receives one
+`{"status":"firing", ...}` event per series when it crosses, and one
+`{"status":"resolved", ...}` once that specific series clears — no
+duplicates while a rule + series pair stays in either state.
+
+Payload fields:
+
+```json
+{
+  "rule":      "low_disk",
+  "expr":      "node_filesystem_avail_bytes",
+  "op":        "<",
+  "threshold": 1073741824,
+  "value":     536870912,
+  "status":    "firing",
+  "labels":    {"mountpoint": "/data", "fstype": "ext4"},
+  "fired_at":  "2026-05-15T20:31:04Z"
+}
+```
+
+`resolved` events carry the same shape plus `resolved_at`.
+
+The webhook URL is normally injected via `OWL_ALERT_WEBHOOK_URL` so it
 stays out of the YAML file.
+
+### Testing the alerter locally
+
+Run a one-shot HTTP echo on the host and point owl at it. The
+[mendhak/http-https-echo](https://hub.docker.com/r/mendhak/http-https-echo)
+image logs every received request to stdout:
+
+```sh
+docker run --rm -p 9091:80 mendhak/http-https-echo:31
+```
+
+In `config.yml`, add a rule guaranteed to fire (owl always exports
+its own runtime metrics):
+
+```yaml
+alerts:
+  webhook_url: "http://host.docker.internal:9091/alert"  # Docker Desktop
+  # webhook_url: "http://172.17.0.1:9091/alert"          # Linux
+  rules:
+    - name: smoke_test
+      expr: "owl_runtime_goroutines"
+      op: ">"
+      threshold: 0
+      for: 0s
+```
+
+Reload (`docker kill -s HUP owl`) and within ~10 s the echo container
+prints the firing event. Drop the rule (or change the threshold to
+something unreachable) and reload again to see the matching
+`resolved` event.
 
 ## Reload
 

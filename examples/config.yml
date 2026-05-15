@@ -48,3 +48,23 @@ host:
 
 dashboards:
   dir: "/etc/owl/dashboards"
+
+# Threshold-based alerting. The webhook URL is usually injected via
+# the OWL_ALERT_WEBHOOK_URL env var so it stays out of YAML. Each rule
+# fans out across every series its expression returns, so a rule like
+# `container_memory_usage_bytes > 1e9` fires once per offending
+# container, identified by its labels.
+#
+# alerts:
+#   webhook_url: ""
+#   rules:
+#     - name: high_container_memory
+#       expr: "container_memory_usage_bytes"
+#       op: ">"
+#       threshold: 1073741824   # 1 GiB
+#       for: 2m
+#     - name: low_disk
+#       expr: "node_filesystem_avail_bytes"
+#       op: "<"
+#       threshold: 1073741824
+#       for: 5m
