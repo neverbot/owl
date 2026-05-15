@@ -59,8 +59,8 @@
     {
       "id": 3,
       "type": "gauge",
-      "title": "GC Pause (total ms)",
-      "description": "Cumulative GC pause time in milliseconds",
+      "title": "GC Pause (last 5 min)",
+      "description": "Total time spent in GC pauses over the past 5 minutes — straight delta on the cumulative counter, scaled to the window.",
       "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
       "fieldConfig": {
         "defaults": {
@@ -74,7 +74,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "owl_runtime_gc_pause_total_ms",
+          "expr": "increase(owl_runtime_gc_pause_total_ms[5m])",
           "legendFormat": "gc pause"
         }
       ]
