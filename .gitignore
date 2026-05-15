@@ -1,0 +1,27 @@
+# Binaries
+/owl
+/dist/
+
+# Test artefacts
+*.test
+*.out
+coverage.txt
+
+# Local data
+*.db
+*.db-wal
+*.db-shm
+/data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Local Claude Code tooling (not project source)
+.claude/skills/
+skills-lock.json
+
+# Private/historical material not published with the repo
+docs/old/
