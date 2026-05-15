@@ -19,5 +19,14 @@ discovery:
   docker:
     enabled: false
 
+# Linux host collector: reads /proc bind-mounted into the container.
+# On Docker Desktop (macOS / Windows) this surfaces the underlying
+# Linux VM's metrics, not the host OS — see the readme.
+host:
+  enabled: true
+  proc_path: "/host/proc"
+  sys_path: "/host/sys"
+  interval: 5s
+
 dashboards:
   dir: "/etc/owl/dashboards"

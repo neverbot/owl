@@ -118,19 +118,117 @@ of the dashboard still works.
 
 ## PromQL subset
 
-```
+owl ships its own PromQL parser and evaluator — small, focused on the
+features a single-host operator actually uses on a dashboard. Anything
+outside the subset returns a parse error with a clear "unsupported"
+message that names the offending construct, and panels that use such
+queries render an explanation in place of the chart (the rest of the
+dashboard keeps working).
+
+### Supported
+
+**Selectors**
+
+```promql
 metric_name
-metric_name{label="value", other!="x", regex=~"foo.*"}
-rate(metric_name[5m])
-sum(expr)              avg(expr)   min(expr)   max(expr)   count(expr)
-sum by (job) (rate(http_requests_total[1m]))
-expr + scalar          scalar * expr           etc.
+metric_name{job="api"}
+metric_name{status=~"5..", method!="OPTIONS"}
 ```
 
-Counter resets inside `rate()` are detected (previous > current is
-treated as a fresh start). Series-on-series arithmetic, `offset`,
-subqueries, `histogram_quantile`, and `irate`/`increase` are not in
-the subset; expressions using them parse with a clear error.
+Label-matcher operators: `=`, `!=`, `=~` (regex match), `!~` (regex
+non-match). Regex anchoring follows Prometheus's convention: the
+pattern is implicitly anchored at both ends.
+
+**Functions**
+
+```promql
+rate(metric_name[1m])
+rate(http_requests_total{status="200"}[5m])
+```
+
+`rate(expr[Nw])` where `N` is a positive integer and `w` is `s`, `m`,
+or `h`. Counter resets are detected: when a sample is strictly less
+than its predecessor, the engine treats it as a fresh start (handles
+process restarts cleanly).
+
+**Aggregations**
+
+```promql
+sum(expr)            avg(expr)
+min(expr)            max(expr)
+count(expr)
+
+sum   by (job)      (rate(http_requests_total[1m]))
+avg   by (instance) (cpu_usage)
+count by (status)   (http_requests_total)
+```
+
+Operators: `sum`, `avg`, `min`, `max`, `count`. The `by (labels)` form
+groups output series by the listed labels. `without (labels)` is **not**
+implemented yet.
+
+**Arithmetic**
+
+```promql
+cpu_usage * 100
+100 - cpu_idle_pct
+node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes
+errors_total / requests_total
+sum by (status) (rate(http_requests_total[1m])) / sum (rate(http_requests_total[1m]))
+```
+
+Operators: `+`, `-`, `*`, `/`.
+
+- **scalar OP expr** and **expr OP scalar** apply the op pointwise with
+  the scalar.
+- **expr OP expr** (series-on-series) matches LHS series to RHS series
+  by **exact label set** (the metric name is dropped on output, per
+  Prometheus convention). If one side has a single series and the other
+  has many, the single series is broadcast against every other.
+  Timestamps are inner-joined: only points that exist on both sides
+  produce output.
+
+Division by zero returns `0` (not `+Inf` / `NaN`), to keep the chart
+layer clean of special-case rendering.
+
+### Not supported
+
+The list below is concrete. Any of these will return a parse error or
+fail to match a series; the dashboard layer marks the affected panel
+as "unsupported" with the engine's reason. PRs welcome.
+
+**Functions**: `irate`, `increase`, `delta`, `idelta`, `deriv`,
+`predict_linear`, `holt_winters`, `histogram_quantile`,
+`*_over_time` (avg_over_time, max_over_time, …), `abs`/`ceil`/`floor`/`round`/`sqrt`/`ln`/`log2`/`log10`/`exp`,
+`topk`/`bottomk`/`quantile`, `clamp`/`clamp_min`/`clamp_max`,
+`label_replace`/`label_join`, `time`/`vector`/`scalar`,
+`sort`/`sort_desc`, `absent`/`absent_over_time`, `changes`, `resets`.
+
+**Aggregation operators**: `stddev`, `stdvar`, `quantile`.
+
+**Aggregation modifiers**: `without (labels)` (only `by` is supported).
+
+**Vector-matching modifiers**: `on(labels)`, `ignoring(labels)`,
+`group_left`/`group_right` — matching is exact-label-set only.
+
+**Modifiers / syntax**: `offset`, `@` modifier (instant queries at a
+fixed time), subqueries (`expr[5m:30s]`), `__name__` regex matching,
+string literals, numeric literals as a top-level expression.
+
+**Logical / set ops**: `and`, `or`, `unless`.
+
+**Comparison ops**: `>`, `<`, `==`, `!=`, `>=`, `<=` (relevant for
+alerting once it lands).
+
+**Operator precedence**: left-to-right only, no PEMDAS. Use parentheses
+around aggregations and `rate()` calls (the parser already requires
+this for the unambiguous cases); chained arithmetic without parens
+binds left.
+
+If a dashboard you care about uses one of these and it would be easy
+to add, raise an issue with the exact expression — most of these are a
+short addition to the parser/evaluator once a real need pins them
+down.
 
 ## API
 
@@ -178,9 +276,23 @@ docker run --rm owl:dev --version
 ## Status
 
 Early. The pieces wired today are: configuration loader, SQLite
-storage with retention, runtime self-metrics, HTTP scraper, query
-engine for the PromQL subset above, dashboard loader, and the web
-server that renders them. Host metrics from `/proc` and `/sys`,
-container metrics from the Docker socket, target auto-discovery,
-threshold alerting, and `SIGHUP`-driven config reload are not yet
-implemented.
+storage with retention, runtime self-metrics, a Linux host collector
+(`/proc` parsing, opt-in, off by default), HTTP scraper, the PromQL
+subset documented above, dashboard loader, and the web server that
+renders them. Container metrics from the Docker socket, target
+auto-discovery, threshold alerting, and `SIGHUP`-driven config reload
+are not yet implemented.
+
+### Host metrics caveat (macOS / Windows / Docker Desktop)
+
+On Linux hosts, owl runs in a container that shares the host kernel.
+Bind-mounting `/proc:/host/proc:ro` (already in the example
+`compose.yml`) gives the host collector a direct view of the real
+host's CPU / memory / load / disk / net stats.
+
+On macOS and Windows, Docker Desktop runs a hidden Linux VM. The
+"host" the container sees is that VM, not the underlying OS. The host
+collector will surface the VM's metrics — useful for confirming the
+loop works end-to-end, but not the OS-level metrics you'd see on a
+production Linux deployment. There is no clean fix from owl's side; it
+is a property of Docker Desktop's architecture.

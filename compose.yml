@@ -24,6 +24,16 @@ services:
       - ./examples/config.yml:/etc/owl/config.yml:ro
       - ./dashboards:/etc/owl/dashboards:ro
       - owl-data:/data
+      # Bind-mount the host's /proc and /sys read-only so the host
+      # collector can read CPU / memory / load / disk / net stats
+      # without needing a separate exporter container.
+      #
+      # On Linux these are the real host's files. On Docker Desktop
+      # (macOS / Windows) the "host" is the Linux VM that Docker
+      # Desktop runs internally, so what you see in dev is the VM's
+      # state, not the OS's. See the readme for the full caveat.
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
     command: ["--config", "/etc/owl/config.yml"]
     restart: unless-stopped
 
