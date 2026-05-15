@@ -50,6 +50,8 @@ type DiscoveryConfig struct {
 	Docker DockerDiscoveryConfig `yaml:"docker"`
 }
 
+// DockerDiscoveryConfig holds the parameters for auto-discovering scrape
+// targets from Docker container labels.
 type DockerDiscoveryConfig struct {
 	Enabled     bool   `yaml:"enabled"`
 	SocketPath  string `yaml:"socket_path"`
