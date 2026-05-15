@@ -142,7 +142,10 @@
   // Chart rendering
 
   var SVG_NS = "http://www.w3.org/2000/svg";
-  var SERIES_PALETTE_SIZE = 5;
+  // Series palette size — twelve hues every 30° on the colour wheel.
+  // Keep this in sync with the --series-1..--series-12 custom
+  // properties in owl.css; the cycle wraps modulo this constant.
+  var SERIES_PALETTE_SIZE = 12;
   var MIN_REFRESH_MS = 1000;
   var DEFAULT_REFRESH_MS = 5000;
   var PAD = { top: 8, right: 12, bottom: 16, left: 44 };

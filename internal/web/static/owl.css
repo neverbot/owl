@@ -53,11 +53,22 @@
   --focus-ring:  oklch(0.62 0.13 0 / 0.4);
 
   --accent:    oklch(0.62 0.13 0);
-  --series-1:  oklch(0.62 0.13 0);    /* magenta */
-  --series-2:  oklch(0.62 0.13 120);  /* green */
-  --series-3:  oklch(0.62 0.13 240);  /* blue */
-  --series-4:  oklch(0.62 0.13 60);   /* amber */
-  --series-5:  oklch(0.62 0.13 180);  /* teal */
+  /* Twelve series colours, hue every 30°. The first five take the
+     well-separated cardinal positions (0/60/120/180/240) so small
+     panels keep the original colour scheme; slots 6-12 fill the
+     intermediate angles for dense multi-series charts. */
+  --series-1:   oklch(0.62 0.13 0);    /* magenta */
+  --series-2:   oklch(0.62 0.13 120);  /* green */
+  --series-3:   oklch(0.62 0.13 240);  /* blue */
+  --series-4:   oklch(0.62 0.13 60);   /* amber */
+  --series-5:   oklch(0.62 0.13 180);  /* teal */
+  --series-6:   oklch(0.62 0.13 30);   /* coral */
+  --series-7:   oklch(0.62 0.13 90);   /* lime */
+  --series-8:   oklch(0.62 0.13 150);  /* mint */
+  --series-9:   oklch(0.62 0.13 210);  /* sky */
+  --series-10:  oklch(0.62 0.13 270);  /* violet */
+  --series-11:  oklch(0.62 0.13 300);  /* purple */
+  --series-12:  oklch(0.62 0.13 330);  /* rose */
 }
 
 /* Dark theme — lift lightness on accent and series for perceptual parity */
@@ -72,11 +83,18 @@
   --focus-ring:  oklch(0.70 0.13 0 / 0.45);
 
   --accent:    oklch(0.70 0.13 0);
-  --series-1:  oklch(0.70 0.13 0);
-  --series-2:  oklch(0.70 0.13 120);
-  --series-3:  oklch(0.70 0.13 240);
-  --series-4:  oklch(0.70 0.13 60);
-  --series-5:  oklch(0.70 0.13 180);
+  --series-1:   oklch(0.70 0.13 0);
+  --series-2:   oklch(0.70 0.13 120);
+  --series-3:   oklch(0.70 0.13 240);
+  --series-4:   oklch(0.70 0.13 60);
+  --series-5:   oklch(0.70 0.13 180);
+  --series-6:   oklch(0.70 0.13 30);
+  --series-7:   oklch(0.70 0.13 90);
+  --series-8:   oklch(0.70 0.13 150);
+  --series-9:   oklch(0.70 0.13 210);
+  --series-10:  oklch(0.70 0.13 270);
+  --series-11:  oklch(0.70 0.13 300);
+  --series-12:  oklch(0.70 0.13 330);
 }
 
 /* Reset */
@@ -364,16 +382,30 @@ body {
 .panel__chart .gridline { stroke: var(--grid-line); stroke-width: 1; }
 .panel__chart .baseline { stroke: var(--rule); stroke-width: 1; stroke-dasharray: 2 4; }
 .panel__chart .series   { fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-.panel__chart .series--1 { stroke: var(--series-1); }
-.panel__chart .series--2 { stroke: var(--series-2); }
-.panel__chart .series--3 { stroke: var(--series-3); }
-.panel__chart .series--4 { stroke: var(--series-4); }
-.panel__chart .series--5 { stroke: var(--series-5); }
-.panel__chart .marker--1 { fill: var(--series-1); }
-.panel__chart .marker--2 { fill: var(--series-2); }
-.panel__chart .marker--3 { fill: var(--series-3); }
-.panel__chart .marker--4 { fill: var(--series-4); }
-.panel__chart .marker--5 { fill: var(--series-5); }
+.panel__chart .series--1  { stroke: var(--series-1); }
+.panel__chart .series--2  { stroke: var(--series-2); }
+.panel__chart .series--3  { stroke: var(--series-3); }
+.panel__chart .series--4  { stroke: var(--series-4); }
+.panel__chart .series--5  { stroke: var(--series-5); }
+.panel__chart .series--6  { stroke: var(--series-6); }
+.panel__chart .series--7  { stroke: var(--series-7); }
+.panel__chart .series--8  { stroke: var(--series-8); }
+.panel__chart .series--9  { stroke: var(--series-9); }
+.panel__chart .series--10 { stroke: var(--series-10); }
+.panel__chart .series--11 { stroke: var(--series-11); }
+.panel__chart .series--12 { stroke: var(--series-12); }
+.panel__chart .marker--1  { fill: var(--series-1); }
+.panel__chart .marker--2  { fill: var(--series-2); }
+.panel__chart .marker--3  { fill: var(--series-3); }
+.panel__chart .marker--4  { fill: var(--series-4); }
+.panel__chart .marker--5  { fill: var(--series-5); }
+.panel__chart .marker--6  { fill: var(--series-6); }
+.panel__chart .marker--7  { fill: var(--series-7); }
+.panel__chart .marker--8  { fill: var(--series-8); }
+.panel__chart .marker--9  { fill: var(--series-9); }
+.panel__chart .marker--10 { fill: var(--series-10); }
+.panel__chart .marker--11 { fill: var(--series-11); }
+.panel__chart .marker--12 { fill: var(--series-12); }
 
 /* Axis labels (rendered inside the SVG) */
 .panel__chart .axis-label {
@@ -397,11 +429,18 @@ body {
   stroke-width: 1.5;
   fill: var(--bg-elevated);
 }
-.panel__chart .hover-point--1 { stroke: var(--series-1); }
-.panel__chart .hover-point--2 { stroke: var(--series-2); }
-.panel__chart .hover-point--3 { stroke: var(--series-3); }
-.panel__chart .hover-point--4 { stroke: var(--series-4); }
-.panel__chart .hover-point--5 { stroke: var(--series-5); }
+.panel__chart .hover-point--1  { stroke: var(--series-1); }
+.panel__chart .hover-point--2  { stroke: var(--series-2); }
+.panel__chart .hover-point--3  { stroke: var(--series-3); }
+.panel__chart .hover-point--4  { stroke: var(--series-4); }
+.panel__chart .hover-point--5  { stroke: var(--series-5); }
+.panel__chart .hover-point--6  { stroke: var(--series-6); }
+.panel__chart .hover-point--7  { stroke: var(--series-7); }
+.panel__chart .hover-point--8  { stroke: var(--series-8); }
+.panel__chart .hover-point--9  { stroke: var(--series-9); }
+.panel__chart .hover-point--10 { stroke: var(--series-10); }
+.panel__chart .hover-point--11 { stroke: var(--series-11); }
+.panel__chart .hover-point--12 { stroke: var(--series-12); }
 
 /* Tooltip block (SVG-native) */
 .panel__chart .tooltip-bg {
@@ -418,11 +457,18 @@ body {
   pointer-events: none;
 }
 .panel__chart .tooltip-text--muted { fill: var(--muted); }
-.panel__chart .tooltip-swatch--1 { fill: var(--series-1); }
-.panel__chart .tooltip-swatch--2 { fill: var(--series-2); }
-.panel__chart .tooltip-swatch--3 { fill: var(--series-3); }
-.panel__chart .tooltip-swatch--4 { fill: var(--series-4); }
-.panel__chart .tooltip-swatch--5 { fill: var(--series-5); }
+.panel__chart .tooltip-swatch--1  { fill: var(--series-1); }
+.panel__chart .tooltip-swatch--2  { fill: var(--series-2); }
+.panel__chart .tooltip-swatch--3  { fill: var(--series-3); }
+.panel__chart .tooltip-swatch--4  { fill: var(--series-4); }
+.panel__chart .tooltip-swatch--5  { fill: var(--series-5); }
+.panel__chart .tooltip-swatch--6  { fill: var(--series-6); }
+.panel__chart .tooltip-swatch--7  { fill: var(--series-7); }
+.panel__chart .tooltip-swatch--8  { fill: var(--series-8); }
+.panel__chart .tooltip-swatch--9  { fill: var(--series-9); }
+.panel__chart .tooltip-swatch--10 { fill: var(--series-10); }
+.panel__chart .tooltip-swatch--11 { fill: var(--series-11); }
+.panel__chart .tooltip-swatch--12 { fill: var(--series-12); }
 
 .panel__footer {
   display: flex;
