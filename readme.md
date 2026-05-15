@@ -109,6 +109,14 @@ targets:
     url: "http://traefik:8082/metrics"
     labels:
       job: traefik
+    # Optional metric-name filters. `keep` is an allowlist applied
+    # first; `drop` then prunes survivors. Regex (RE2 syntax). Use
+    # them to keep the SQLite footprint reasonable when a target
+    # exposes very verbose histograms or counters you do not need.
+    # keep:
+    #   - "^traefik_(service|router)_(requests_total|open_connections)$"
+    # drop:
+    #   - "_bucket$"
 
 dashboards:
   dir: "/etc/owl/dashboards"

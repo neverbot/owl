@@ -36,14 +36,24 @@ type ScrapeConfig struct {
 	DefaultTimeout  time.Duration `yaml:"default_timeout"`
 }
 
-// TargetConfig declares an explicit HTTP scrape target. The auto-discovered
-// Docker targets live separately and are merged at runtime.
+// TargetConfig declares an explicit HTTP scrape target. The auto-
+// discovered Docker targets live separately and are merged at runtime.
+//
+// Keep and Drop are optional metric-name filters applied to the parsed
+// batch before it reaches storage. Each entry is a regular expression
+// (RE2 syntax, anchored implicitly at both ends by the parser). When
+// Keep is non-empty only metrics whose name matches one of the
+// patterns are stored; Drop then removes any survivor whose name
+// matches one of its patterns. Empty filters preserve the historical
+// behaviour of storing everything the endpoint exposes.
 type TargetConfig struct {
 	Name     string            `yaml:"name"`
 	URL      string            `yaml:"url"`
 	Interval time.Duration     `yaml:"interval,omitempty"`
 	Timeout  time.Duration     `yaml:"timeout,omitempty"`
 	Labels   map[string]string `yaml:"labels,omitempty"`
+	Keep     []string          `yaml:"keep,omitempty"`
+	Drop     []string          `yaml:"drop,omitempty"`
 }
 
 // DockerConfig groups every Docker-related capability. Both the

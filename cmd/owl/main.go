@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -336,6 +337,10 @@ func run(cfg config.Config, configPath string) error {
 	return nil
 }
 
+// buildTargets translates the YAML target list into runtime
+// scrape.Target objects. Regex filters are compiled here; config
+// validation already rejected invalid patterns at startup, so a
+// surprise compile error this late means an internal bug.
 func buildTargets(cfg config.Config) []scrape.Target {
 	defInterval := cfg.Scrape.DefaultInterval
 	defTimeout := cfg.Scrape.DefaultTimeout
@@ -359,7 +364,23 @@ func buildTargets(cfg config.Config) []scrape.Target {
 			Interval: interval,
 			Timeout:  timeout,
 			Labels:   labels,
+			Keep:     mustCompilePatterns(t.Keep),
+			Drop:     mustCompilePatterns(t.Drop),
 		})
+	}
+	return out
+}
+
+// mustCompilePatterns compiles every pattern in the slice or panics.
+// Patterns are validated up-front by config.Validate; reaching here
+// with an invalid pattern would mean a code path skipped validation.
+func mustCompilePatterns(patterns []string) []*regexp.Regexp {
+	if len(patterns) == 0 {
+		return nil
+	}
+	out := make([]*regexp.Regexp, len(patterns))
+	for i, p := range patterns {
+		out[i] = regexp.MustCompile(p)
 	}
 	return out
 }

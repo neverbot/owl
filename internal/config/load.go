@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -64,6 +65,16 @@ func Validate(c *Config) error {
 		}
 		if t.URL == "" {
 			return fmt.Errorf("targets[%d] (%s): url is required", i, t.Name)
+		}
+		for j, p := range t.Keep {
+			if _, err := regexp.Compile(p); err != nil {
+				return fmt.Errorf("targets[%d] (%s): keep[%d] %q: %w", i, t.Name, j, p, err)
+			}
+		}
+		for j, p := range t.Drop {
+			if _, err := regexp.Compile(p); err != nil {
+				return fmt.Errorf("targets[%d] (%s): drop[%d] %q: %w", i, t.Name, j, p, err)
+			}
 		}
 	}
 	return nil

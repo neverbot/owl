@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"time"
 
 	"github.com/neverbot/owl/internal/scrape/expfmt"
@@ -14,12 +15,20 @@ import (
 
 // Target is one scrape target as Owl sees it at runtime. It is a
 // flattened view of TargetConfig plus discovery output.
+//
+// Keep and Drop are optional metric-name filters compiled from the
+// regex strings in TargetConfig. When Keep is non-empty only samples
+// whose metric name matches at least one Keep pattern survive; Drop
+// then removes any survivor matching at least one Drop pattern. Nil
+// or empty filters preserve everything the endpoint exposes.
 type Target struct {
 	Name     string            // unique stable id
 	URL      string            // full http URL of the /metrics endpoint
 	Interval time.Duration     // ignored by ScrapeOnce, used by Manager
 	Timeout  time.Duration     // per-request timeout
 	Labels   map[string]string // attached to every sample
+	Keep     []*regexp.Regexp
+	Drop     []*regexp.Regexp
 }
 
 // ScrapeOnce performs one GET against tgt.URL with tgt.Timeout, parses
@@ -62,6 +71,9 @@ func ScrapeOnce(ctx context.Context, tgt Target, app storage.Appender) (int, err
 
 	batch := make([]storage.Sample, 0, len(parsed))
 	for _, p := range parsed {
+		if !keepMetric(p.Metric, tgt.Keep, tgt.Drop) {
+			continue
+		}
 		labels := mergeLabels(tgt.Labels, p.Labels, instance)
 		ts := p.Timestamp
 		if ts == 0 {
@@ -99,6 +111,32 @@ func mergeLabels(targetLabels, sampleLabels map[string]string, instance string) 
 		}
 	}
 	return out
+}
+
+// keepMetric reports whether a metric name survives the target's
+// Keep/Drop filters. Keep is an allowlist: if any patterns are set the
+// metric must match at least one to survive. Drop is a denylist:
+// applied after Keep, any match removes the metric. Empty filters mean
+// "accept everything".
+func keepMetric(name string, keep, drop []*regexp.Regexp) bool {
+	if len(keep) > 0 {
+		ok := false
+		for _, re := range keep {
+			if re.MatchString(name) {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return false
+		}
+	}
+	for _, re := range drop {
+		if re.MatchString(name) {
+			return false
+		}
+	}
+	return true
 }
 
 // hostPort returns "host:port" extracted from a URL, or empty on parse

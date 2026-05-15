@@ -107,6 +107,43 @@ func TestLoadValidatesRequiredFields(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsInvalidKeepRegex(t *testing.T) {
+	// An unterminated alternation must fail validation rather than
+	// crash later in mustCompilePatterns or silently drop nothing.
+	path := writeTemp(t, "bad-keep.yml", `
+targets:
+  - name: t
+    url: "http://x/metrics"
+    keep:
+      - "(?P<oops"
+`)
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected error for invalid keep regex")
+	}
+}
+
+func TestLoadAcceptsValidKeepAndDrop(t *testing.T) {
+	path := writeTemp(t, "filters.yml", `
+targets:
+  - name: t
+    url: "http://x/metrics"
+    keep:
+      - "^foo_.*$"
+    drop:
+      - "_bucket$"
+`)
+	c, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(c.Targets[0].Keep) != 1 || c.Targets[0].Keep[0] != "^foo_.*$" {
+		t.Errorf("keep: %v", c.Targets[0].Keep)
+	}
+	if len(c.Targets[0].Drop) != 1 || c.Targets[0].Drop[0] != "_bucket$" {
+		t.Errorf("drop: %v", c.Targets[0].Drop)
+	}
+}
+
 func TestLoadEmptyFileUsesDefaults(t *testing.T) {
 	// An empty or comment-only YAML file must not be a parse error: the
 	// caller gets a Config equal to Default(), which then passes Validate.
