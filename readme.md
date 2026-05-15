@@ -38,9 +38,15 @@ Prometheus + Grafana is too heavy and a SaaS funnel is the wrong shape.
   queries fall outside the subset render with a clear "unsupported"
   message instead of breaking the whole dashboard.
 - Threshold alerting: rules in `config.yml` fire / resolve via a
-  webhook POST, with per-rule dedup and a configurable `for` hold.
-- Atomic live reload of config, dashboards, scrape targets and alert
-  rules via `SIGHUP` or `POST /-/reload`.
+  webhook POST. Each rule fans out across every series its
+  expression returns, so one rule covers every container or
+  filesystem the matcher selects. Per-rule + per-series dedup and a
+  configurable `for` hold.
+- A scrape-health page at `/targets` (and JSON at `/api/targets`)
+  lists every active target — explicit and Docker-discovered — with
+  last scrape time, sample count, duration and any error.
+- Atomic live reload of config, dashboards, scrape targets, alert
+  rules and the alert webhook URL via `SIGHUP` or `POST /-/reload`.
 - Structured logging through `log/slog` at the level configured by
   `log_level` (info / debug / warn / error). Graceful shutdown that
   waits for every collector and worker to drain before exiting.
@@ -330,7 +336,7 @@ Run a one-shot HTTP echo on the host and point owl at it. The
 image logs every received request to stdout:
 
 ```sh
-docker run --rm -p 9091:80 mendhak/http-https-echo:31
+docker run --rm -p 9091:8080 mendhak/http-https-echo:31
 ```
 
 In `config.yml`, add a rule guaranteed to fire (owl always exports
@@ -353,6 +359,12 @@ prints the firing event. Drop the rule (or change the threshold to
 something unreachable) and reload again to see the matching
 `resolved` event.
 
+On Docker Desktop, leave a one-second gap between saving the config
+and sending `SIGHUP`: the bind-mount inode swap (most editors save by
+write-and-rename) sometimes lags the signal by a beat, and owl will
+re-read the old contents otherwise. On a Linux host the propagation
+is immediate.
+
 ## Reload
 
 owl re-reads `config.yml` and `dashboards/*.json` atomically on:
@@ -368,11 +380,13 @@ The following take effect immediately:
   per-target goroutines without dropping in-flight samples).
 - Alert rules in `alerts.rules` (existing rules keep their firing
   state so a reload doesn't re-trigger a webhook).
+- `alerts.webhook_url` — the delivery sink is swapped atomically;
+  in-flight POSTs finish against the old URL, the next state
+  transition uses the new one.
 
 What still requires a restart:
 
 - `listen` — the HTTP server is constructed once.
-- `alerts.webhook_url` — the webhook client is constructed once.
 - `storage.path` and `storage.retention` settings — storage is opened
   once.
 
@@ -428,9 +442,10 @@ graceful shutdown that waits for every collector and worker to drain,
 and structured logging (`log/slog`) at a level chosen by
 `log_level` in the YAML or `OWL_LOG_LEVEL` in the env.
 
-The webhook URL and the listener address still take their value from
-the YAML at startup — changing them needs a process restart. Other
-than that, every subsystem updates live on reload.
+Only the listener address and the storage path / retention take their
+value from the YAML at startup — changing them needs a process
+restart. Everything else (targets, dashboards, alert rules, the alert
+webhook URL) updates live on reload.
 
 ### Docker socket permission
 
