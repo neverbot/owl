@@ -292,9 +292,9 @@ func (p *parser) parseAtom() (Node, error) {
 		return p.parseAggregation()
 	}
 
-	// rate function
-	if word == "rate" {
-		return p.parseRate()
+	// rate / irate / increase: same shape `fn(selector[Nd])`.
+	if rangeFuncs[word] {
+		return p.parseRangeFunc(word)
 	}
 
 	// Consume the identifier.
@@ -410,16 +410,28 @@ func (p *parser) parseAggregation() (*AggregationNode, error) {
 	return &AggregationNode{Op: op, By: by, Expr: inner}, nil
 }
 
-func (p *parser) parseRate() (*RateNode, error) {
-	p.consume() // consume "rate"
+// rangeFuncs lists the range-vector functions the parser recognises.
+// Every entry has the same shape `fn(selector[Nd])`, so they share a
+// single parser routine; the evaluator dispatches on the name.
+var rangeFuncs = map[string]bool{
+	"rate":     true,
+	"irate":    true,
+	"increase": true,
+}
+
+// parseRangeFunc parses `<fn>(metric[Nd])` for any fn in rangeFuncs.
+// The current token is the function-name identifier when called.
+func (p *parser) parseRangeFunc(fn string) (*RangeFuncNode, error) {
+	p.consume() // consume function name
 	if p.cur.kind != tokLParen {
-		return nil, fmt.Errorf("parse: expected '(' after 'rate', got %q", p.cur.val)
+		return nil, fmt.Errorf("parse: expected '(' after %q, got %q", fn, p.cur.val)
 	}
 	p.consume() // consume (
 
-	// Inner expr must be a selector (no nested rate/aggregation in MVP).
+	// Inner expr must be a selector (no nested function calls or
+	// aggregations on the range-vector argument in the MVP).
 	if p.cur.kind != tokIdent {
-		return nil, fmt.Errorf("parse: expected metric selector inside rate(), got %q", p.cur.val)
+		return nil, fmt.Errorf("parse: expected metric selector inside %s(), got %q", fn, p.cur.val)
 	}
 	metric := p.cur.val
 	p.consume()
@@ -430,12 +442,12 @@ func (p *parser) parseRate() (*RateNode, error) {
 
 	// Now expect [Nd]
 	if p.cur.kind != tokLBracket {
-		return nil, fmt.Errorf("parse: expected '[' for duration window in rate(), got %q", p.cur.val)
+		return nil, fmt.Errorf("parse: expected '[' for duration window in %s(), got %q", fn, p.cur.val)
 	}
 	p.consume() // consume [
 
 	if p.cur.kind != tokNumber {
-		return nil, fmt.Errorf("parse: expected duration number in rate window, got %q", p.cur.val)
+		return nil, fmt.Errorf("parse: expected duration number in %s window, got %q", fn, p.cur.val)
 	}
 	n, err := strconv.ParseInt(p.cur.val, 10, 64)
 	if err != nil {
@@ -444,7 +456,7 @@ func (p *parser) parseRate() (*RateNode, error) {
 	p.consume() // consume number
 
 	if p.cur.kind != tokDurationUnit {
-		return nil, fmt.Errorf("parse: expected duration unit (s/m/h) in rate window, got %q", p.cur.val)
+		return nil, fmt.Errorf("parse: expected duration unit (s/m/h) in %s window, got %q", fn, p.cur.val)
 	}
 	unit := p.cur.val
 	p.consume() // consume unit
@@ -455,9 +467,9 @@ func (p *parser) parseRate() (*RateNode, error) {
 	p.consume() // consume ]
 
 	if p.cur.kind != tokRParen {
-		return nil, fmt.Errorf("parse: expected ')' after rate() window, got %q", p.cur.val)
+		return nil, fmt.Errorf("parse: expected ')' after %s() window, got %q", fn, p.cur.val)
 	}
 	p.consume() // consume )
 
-	return &RateNode{Expr: inner, Window: Duration{Value: n, Unit: unit}}, nil
+	return &RangeFuncNode{Func: fn, Expr: inner, Window: Duration{Value: n, Unit: unit}}, nil
 }

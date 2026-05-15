@@ -29,8 +29,8 @@ func (e *evaluator) eval(node Node) ([]storage.Series, error) {
 	switch n := node.(type) {
 	case *SelectorNode:
 		return e.evalSelector(n)
-	case *RateNode:
-		return e.evalRate(n)
+	case *RangeFuncNode:
+		return e.evalRangeFunc(n)
 	case *AggregationNode:
 		return e.evalAggregation(n)
 	case *BinaryOpNode:
@@ -105,14 +105,19 @@ func matchesAll(labels map[string]string, matchers []compiledMatcher) bool {
 	return true
 }
 
-// evalRate computes per-second rate from consecutive samples in a
-// sliding window. For a range query (step > 0) it emits one rate per
-// step across [from, to]; for an instant query (step == 0) it emits a
-// single rate at to.
+// evalRangeFunc evaluates the rate / irate / increase trio. They
+// share the same windowing machinery: pick a set of evaluation
+// timestamps, slice the inner series' samples that fall in each
+// window, then call a function-specific compute step.
 //
-// Counter resets (prev > curr) are detected and handled: the delta for
-// that interval is treated as just the current value.
-func (e *evaluator) evalRate(n *RateNode) ([]storage.Series, error) {
+// For a range query (step > 0) it emits one value per step across
+// [from, to]; for an instant query (step == 0) it emits a single
+// value at to.
+//
+// Counter resets (prev > curr) are detected and handled by the inner
+// compute helpers: the delta for that interval is treated as just
+// the current value.
+func (e *evaluator) evalRangeFunc(n *RangeFuncNode) ([]storage.Series, error) {
 	windowMs := n.Window.Milliseconds()
 	// Extend from by the window so the first step has enough lookback.
 	extFrom := e.from - windowMs
@@ -141,30 +146,75 @@ func (e *evaluator) evalRate(n *RateNode) ([]storage.Series, error) {
 		}
 	}
 
+	compute := pickRangeCompute(n.Func, windowMs)
+
 	out := make([]storage.Series, 0, len(inner))
 	for _, s := range inner {
 		pts := s.Points
 		if len(pts) < 2 {
 			continue
 		}
-		rated := make([]storage.Point, 0, len(timestamps))
+		emitted := make([]storage.Point, 0, len(timestamps))
 		for _, t := range timestamps {
 			window := samplesInWindow(pts, t-windowMs, t)
 			if len(window) < 2 {
 				continue
 			}
-			rated = append(rated, storage.Point{TS: t, Value: computeRate(window)})
+			emitted = append(emitted, storage.Point{TS: t, Value: compute(window)})
 		}
-		if len(rated) == 0 {
+		if len(emitted) == 0 {
 			continue
 		}
 		out = append(out, storage.Series{
 			Metric: s.Metric,
 			Labels: s.Labels,
-			Points: rated,
+			Points: emitted,
 		})
 	}
 	return out, nil
+}
+
+// pickRangeCompute returns the per-window value function for one of
+// the supported range functions. Unknown function names fall back to
+// computeRate; the parser already rejects unknown functions, so
+// reaching the default would be an internal bug.
+func pickRangeCompute(fn string, windowMs int64) func([]storage.Point) float64 {
+	switch fn {
+	case "irate":
+		return computeIRate
+	case "increase":
+		windowSeconds := float64(windowMs) / 1000.0
+		return func(pts []storage.Point) float64 {
+			return computeRate(pts) * windowSeconds
+		}
+	default: // "rate"
+		return computeRate
+	}
+}
+
+// computeIRate returns the per-second rate computed from just the
+// last two samples in the window. It is preferable to rate for
+// volatile counters because it does not smear sudden bursts across
+// the entire window — but it is also noisier, which is why rate
+// remains the default.
+func computeIRate(pts []storage.Point) float64 {
+	if len(pts) < 2 {
+		return 0
+	}
+	a := pts[len(pts)-2]
+	b := pts[len(pts)-1]
+	spanMs := b.TS - a.TS
+	if spanMs <= 0 {
+		return 0
+	}
+	var delta float64
+	if b.Value >= a.Value {
+		delta = b.Value - a.Value
+	} else {
+		// Counter reset: treat curr as a fresh accumulation from zero.
+		delta = b.Value
+	}
+	return delta / (float64(spanMs) / 1000.0)
 }
 
 // samplesInWindow returns the subset of pts whose ts falls in [lo, hi]

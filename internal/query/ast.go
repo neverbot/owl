@@ -41,13 +41,26 @@ func (d Duration) Milliseconds() int64 {
 	}
 }
 
-// RateNode represents rate(expr[Nd]).
-type RateNode struct {
+// RangeFuncNode represents a function applied to a range-vector
+// selector with a window: `func(expr[Nd])`. Func is one of "rate",
+// "irate", or "increase".
+//
+//   - rate: per-second average across every sample pair in the window.
+//   - irate: per-second rate using only the last two samples in the
+//     window — better for spiky counters than rate's smoothing.
+//   - increase: total counter delta across the window
+//     (mathematically equivalent to rate * window-seconds).
+//
+// All three share the same parser, the same per-series sliding
+// window, and the same counter-reset handling; they differ only in
+// the value emitted at each step.
+type RangeFuncNode struct {
+	Func   string
 	Expr   Node
 	Window Duration
 }
 
-func (*RateNode) nodeMarker() {}
+func (*RangeFuncNode) nodeMarker() {}
 
 // AggregationNode represents sum/avg/min/max/count, optionally with by(labels).
 type AggregationNode struct {

@@ -143,6 +143,88 @@ func TestEvalRateCounterReset(t *testing.T) {
 	}
 }
 
+func TestEvalIncrease(t *testing.T) {
+	// Counter goes from 100 to 220 across 60 s. Increase over a 1m
+	// window is the raw delta, 120. (Equivalent to rate * 60 = 2 * 60.)
+	q := newFakeQuerier()
+	q.addSeries("reqs_total", map[string]string{"job": "api"}, []storage.Point{
+		{TS: 0, Value: 100},
+		{TS: 60_000, Value: 220},
+	})
+
+	node, err := Parse("increase(reqs_total[1m])")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := newEvaluator(q, 0, 60_000)
+	series, err := ev.eval(node)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(series) != 1 || len(series[0].Points) != 1 {
+		t.Fatalf("want 1 series with 1 point, got %d series, %d pts",
+			len(series), len(series[0].Points))
+	}
+	got := series[0].Points[0].Value
+	want := 120.0
+	if math.Abs(got-want) > 1e-9 {
+		t.Errorf("increase: want %v, got %v", want, got)
+	}
+}
+
+func TestEvalIRateUsesOnlyLastTwoSamples(t *testing.T) {
+	// Three samples: 0→100, 10s→110 (slow), 60s→220 (sudden jump).
+	// rate(1m) smears the burst: (10 + 110) / 60 = 2.0/s.
+	// irate(1m) uses just the last pair: (220-110) / (60-10) = 2.2/s.
+	q := newFakeQuerier()
+	q.addSeries("reqs_total", map[string]string{}, []storage.Point{
+		{TS: 0, Value: 100},
+		{TS: 10_000, Value: 110},
+		{TS: 60_000, Value: 220},
+	})
+
+	node, err := Parse("irate(reqs_total[1m])")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := newEvaluator(q, 0, 60_000)
+	series, err := ev.eval(node)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := series[0].Points[0].Value
+	want := 110.0 / 50.0
+	if math.Abs(got-want) > 1e-9 {
+		t.Errorf("irate: want %v, got %v", want, got)
+	}
+}
+
+func TestEvalIRateCounterReset(t *testing.T) {
+	// Last two samples: 100 (TS 10s) → 5 (TS 20s) means counter reset.
+	// irate treats the post-reset value as a fresh delta: 5 / 10 = 0.5/s.
+	q := newFakeQuerier()
+	q.addSeries("reqs_total", map[string]string{}, []storage.Point{
+		{TS: 0, Value: 50},
+		{TS: 10_000, Value: 100},
+		{TS: 20_000, Value: 5},
+	})
+
+	node, err := Parse("irate(reqs_total[30s])")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := newEvaluator(q, 0, 30_000)
+	series, err := ev.eval(node)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := series[0].Points[0].Value
+	want := 0.5
+	if math.Abs(got-want) > 1e-9 {
+		t.Errorf("irate after reset: want %v, got %v", want, got)
+	}
+}
+
 func TestEvalSum(t *testing.T) {
 	q := newFakeQuerier()
 	q.addSeries("cpu", map[string]string{"host": "a"}, []storage.Point{{TS: 1000, Value: 10}})

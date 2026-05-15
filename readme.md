@@ -175,12 +175,26 @@ pattern is implicitly anchored at both ends.
 ```promql
 rate(metric_name[1m])
 rate(http_requests_total{status="200"}[5m])
+irate(http_requests_total[1m])
+increase(http_requests_total[1h])
 ```
 
-`rate(expr[Nw])` where `N` is a positive integer and `w` is `s`, `m`,
-or `h`. Counter resets are detected: when a sample is strictly less
-than its predecessor, the engine treats it as a fresh start (handles
-process restarts cleanly).
+Three range-vector functions, all sharing the shape `fn(expr[Nw])`
+where `N` is a positive integer and `w` is `s`, `m`, or `h`. Counter
+resets are detected in all three: when a sample is strictly less than
+its predecessor the engine treats it as a fresh start (handles process
+restarts cleanly).
+
+- **`rate(expr[w])`** — per-second average across every sample pair
+  in the window. Smooth; best for graphs.
+- **`irate(expr[w])`** — per-second rate computed from only the last
+  two samples in the window. Noisier than `rate`, but does not smear
+  sudden bursts across the whole window. Best for alerts on volatile
+  counters where you want the instantaneous reading.
+- **`increase(expr[w])`** — total counter delta across the window.
+  Mathematically equivalent to `rate(expr[w]) * window-seconds`.
+  Best for "how many X happened in the last hour" tables and
+  threshold rules.
 
 **Aggregations**
 

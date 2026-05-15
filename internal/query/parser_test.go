@@ -131,9 +131,12 @@ func TestParseRate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, ok := node.(*RateNode)
+	r, ok := node.(*RangeFuncNode)
 	if !ok {
-		t.Fatalf("expected *RateNode, got %T", node)
+		t.Fatalf("expected *RangeFuncNode, got %T", node)
+	}
+	if r.Func != "rate" {
+		t.Errorf("func: want rate, got %q", r.Func)
 	}
 	if r.Window.Value != 5 || r.Window.Unit != "m" {
 		t.Errorf("window: want 5m, got %+v", r.Window)
@@ -144,6 +147,25 @@ func TestParseRate(t *testing.T) {
 	}
 	if sel.Metric != "http_requests_total" {
 		t.Errorf("inner metric: %q", sel.Metric)
+	}
+}
+
+func TestParseIRateAndIncrease(t *testing.T) {
+	for _, fn := range []string{"irate", "increase"} {
+		node, err := Parse(fn + "(http_requests_total[2m])")
+		if err != nil {
+			t.Fatalf("%s: %v", fn, err)
+		}
+		r, ok := node.(*RangeFuncNode)
+		if !ok {
+			t.Fatalf("%s: expected *RangeFuncNode, got %T", fn, node)
+		}
+		if r.Func != fn {
+			t.Errorf("%s: Func = %q", fn, r.Func)
+		}
+		if r.Window.Value != 2 || r.Window.Unit != "m" {
+			t.Errorf("%s: window: want 2m, got %+v", fn, r.Window)
+		}
 	}
 }
 
@@ -179,9 +201,9 @@ func TestParseAggregationWithBy(t *testing.T) {
 	if len(agg.By) != 1 || agg.By[0] != "job" {
 		t.Errorf("by: want [job], got %v", agg.By)
 	}
-	inner, ok := agg.Expr.(*RateNode)
+	inner, ok := agg.Expr.(*RangeFuncNode)
 	if !ok {
-		t.Fatalf("inner: expected *RateNode, got %T", agg.Expr)
+		t.Fatalf("inner: expected *RangeFuncNode, got %T", agg.Expr)
 	}
 	if inner.Window.Value != 1 || inner.Window.Unit != "m" {
 		t.Errorf("window: want 1m, got %+v", inner.Window)
