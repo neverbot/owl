@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/neverbot/owl/internal/alert"
 	"github.com/neverbot/owl/internal/collect/host"
 	rtcollect "github.com/neverbot/owl/internal/collect/runtime"
 	"github.com/neverbot/owl/internal/config"
@@ -144,6 +145,29 @@ func run(cfg config.Config) error {
 
 	// Query engine.
 	engine := query.NewEngine(store)
+
+	// Optional alerter. Threshold rules from cfg.Alerts.Rules are
+	// evaluated against the query engine; transitions are POSTed to
+	// the configured webhook. Disabled when no rules are configured.
+	if len(cfg.Alerts.Rules) > 0 {
+		var rules []alert.Rule
+		for _, r := range cfg.Alerts.Rules {
+			rules = append(rules, alert.Rule{
+				Name:      r.Name,
+				Expr:      r.Expr,
+				Op:        r.Op,
+				Threshold: r.Threshold,
+				For:       r.For,
+			})
+		}
+		var wh alert.Webhook
+		if cfg.Alerts.WebhookURL != "" {
+			wh = alert.NewHTTPWebhook(cfg.Alerts.WebhookURL)
+		}
+		alerter := alert.New(engine, wh, rules, 0)
+		go alerter.Run(ctx)
+		fmt.Fprintf(os.Stderr, "owl: alerter evaluating %d rule(s)\n", len(rules))
+	}
 
 	// Dashboard loader.
 	dashLoader := dashboards.NewLoader(cfg.Dashboards.Dir, engine)
