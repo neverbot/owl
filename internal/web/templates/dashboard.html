@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} — owl</title>
+  <link rel="stylesheet" href="/static/owl.css">
+  <style>
+    .panel-grid {
+      display: grid;
+      grid-template-columns: repeat(24, 1fr);
+      gap: 1rem;
+    }
+    .unsupported { color: var(--muted); font-size: 0.875rem; margin: 0.5rem 0 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>{{.Title}}</h1>
+    <section class="panel-grid">
+      {{range .Panels}}
+      <article class="panel"
+        data-panel-id="{{.ID}}"
+        data-expr="{{.Expr}}"
+        data-refresh="{{$.RefreshMS}}"
+        data-unit="{{.Unit}}"
+        data-status="{{.Status}}"
+        data-reason="{{.Reason}}"
+        style="grid-column:{{.ColStart}}/span {{.ColSpan}};grid-row:{{.RowStart}}/span {{.RowSpan}}">
+        <h2>{{.Title}}</h2>
+        {{if eq .Status "unsupported"}}
+        <p class="unsupported">{{.Reason}}</p>
+        {{else}}
+        <svg></svg>
+        <span class="last">—</span>
+        {{end}}
+      </article>
+      {{end}}
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>
