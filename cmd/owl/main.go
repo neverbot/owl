@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -101,10 +102,19 @@ func run(cfg config.Config, configPath string) error {
 			cfg.Host.ProcPath, cfg.Host.Interval)
 	}
 
+	// Query engine (constructed early so both the alerter and the
+	// web layer share the same instance).
+	engine := query.NewEngine(store)
+
 	// HTTP scrape manager.
 	scrapeMgr := scrape.NewManager(store)
-	yamlTargets := buildTargets(cfg)
-	scrapeMgr.Set(yamlTargets)
+	// yamlTargetsPtr lives behind an atomic.Pointer so the reload
+	// closure (further down) and the discovery merge goroutine can
+	// observe new target lists without locking.
+	initial := buildTargets(cfg)
+	var yamlTargetsPtr atomic.Pointer[[]scrape.Target]
+	yamlTargetsPtr.Store(&initial)
+	scrapeMgr.Set(initial)
 	go scrapeMgr.Run(ctx)
 
 	// Optional Docker integration: per-container metrics and / or
@@ -132,8 +142,9 @@ func run(cfg config.Config, configPath string) error {
 			go disc.Run(ctx, snapshots)
 			go func() {
 				for found := range snapshots {
-					merged := make([]scrape.Target, 0, len(yamlTargets)+len(found))
-					merged = append(merged, yamlTargets...)
+					y := *yamlTargetsPtr.Load()
+					merged := make([]scrape.Target, 0, len(y)+len(found))
+					merged = append(merged, y...)
 					merged = append(merged, found...)
 					scrapeMgr.Set(merged)
 				}
@@ -143,30 +154,17 @@ func run(cfg config.Config, configPath string) error {
 		}
 	}
 
-	// Query engine.
-	engine := query.NewEngine(store)
-
-	// Optional alerter. Threshold rules from cfg.Alerts.Rules are
-	// evaluated against the query engine; transitions are POSTed to
-	// the configured webhook. Disabled when no rules are configured.
-	if len(cfg.Alerts.Rules) > 0 {
-		var rules []alert.Rule
-		for _, r := range cfg.Alerts.Rules {
-			rules = append(rules, alert.Rule{
-				Name:      r.Name,
-				Expr:      r.Expr,
-				Op:        r.Op,
-				Threshold: r.Threshold,
-				For:       r.For,
-			})
-		}
-		var wh alert.Webhook
-		if cfg.Alerts.WebhookURL != "" {
-			wh = alert.NewHTTPWebhook(cfg.Alerts.WebhookURL)
-		}
-		alerter := alert.New(engine, wh, rules, 0)
-		go alerter.Run(ctx)
-		fmt.Fprintf(os.Stderr, "owl: alerter evaluating %d rule(s)\n", len(rules))
+	// Alerter — always created so reload can populate / depopulate
+	// its rule set without a restart. Disabled in effect when there
+	// are no rules (the evaluation loop is a no-op).
+	var webhook alert.Webhook
+	if cfg.Alerts.WebhookURL != "" {
+		webhook = alert.NewHTTPWebhook(cfg.Alerts.WebhookURL)
+	}
+	alerter := alert.New(engine, webhook, buildAlertRules(cfg), 0)
+	go alerter.Run(ctx)
+	if n := len(cfg.Alerts.Rules); n > 0 {
+		fmt.Fprintf(os.Stderr, "owl: alerter evaluating %d rule(s)\n", n)
 	}
 
 	// Dashboard loader.
@@ -175,11 +173,12 @@ func run(cfg config.Config, configPath string) error {
 		return fmt.Errorf("dashboards: %w", err)
 	}
 
-	// reload re-reads config.yml and dashboards/*.json atomically. It
-	// is wired to both SIGHUP and POST /-/reload. Scrape targets and
-	// alert rules captured at startup do NOT update yet — those take
-	// a process restart. Dashboard JSON does take effect immediately
-	// (the loader holds the new index atomically).
+	// reload re-reads config.yml and dashboards/*.json atomically and
+	// applies updates to live subsystems: scrape targets, alert rules,
+	// and the in-memory dashboard index. Wired to both SIGHUP and
+	// POST /-/reload. The webhook URL and the listener address still
+	// require a process restart — they're set once when the HTTP
+	// server is constructed.
 	reload := func() error {
 		newCfg, err := config.Load(configPath)
 		if err != nil {
@@ -192,7 +191,17 @@ func run(cfg config.Config, configPath string) error {
 		if err := dashLoader.Reload(); err != nil {
 			return fmt.Errorf("dashboards: %w", err)
 		}
-		fmt.Fprintln(os.Stderr, "owl: reloaded config and dashboards")
+		// Update the live scrape target list. The discovery merge
+		// goroutine (if running) will pick up the new yamlTargets on
+		// its next snapshot; we also push an immediate Set so the
+		// reload feels instant when discovery is off or on a long
+		// cadence.
+		newYaml := buildTargets(newCfg)
+		yamlTargetsPtr.Store(&newYaml)
+		scrapeMgr.Set(newYaml)
+		alerter.SetRules(buildAlertRules(newCfg))
+		fmt.Fprintf(os.Stderr, "owl: reloaded — %d target(s), %d rule(s), %d dashboard(s)\n",
+			len(newYaml), len(newCfg.Alerts.Rules), len(dashLoader.List()))
 		return nil
 	}
 
@@ -268,6 +277,22 @@ func buildTargets(cfg config.Config) []scrape.Target {
 			Interval: interval,
 			Timeout:  timeout,
 			Labels:   labels,
+		})
+	}
+	return out
+}
+
+// buildAlertRules converts the YAML alert rules into the alert
+// package's runtime representation.
+func buildAlertRules(cfg config.Config) []alert.Rule {
+	out := make([]alert.Rule, 0, len(cfg.Alerts.Rules))
+	for _, r := range cfg.Alerts.Rules {
+		out = append(out, alert.Rule{
+			Name:      r.Name,
+			Expr:      r.Expr,
+			Op:        r.Op,
+			Threshold: r.Threshold,
+			For:       r.For,
 		})
 	}
 	return out

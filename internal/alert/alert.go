@@ -11,6 +11,7 @@ package alert
 import (
 	"context"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/neverbot/owl/internal/query"
@@ -58,9 +59,11 @@ type Event struct {
 	ResolvedAt time.Time         `json:"resolved_at,omitempty"`
 }
 
-// Manager periodically evaluates a fixed rule set against the query
-// engine and dispatches webhook events on state transitions.
+// Manager periodically evaluates a rule set against the query engine
+// and dispatches webhook events on state transitions. The rule set
+// can be replaced at runtime via SetRules (see /-/reload wiring).
 type Manager struct {
+	mu       sync.Mutex // guards rules and state
 	rules    []Rule
 	state    map[string]*ruleState
 	q        Querier
@@ -119,19 +122,41 @@ func (m *Manager) Run(ctx context.Context) {
 	}
 }
 
+// SetRules replaces the rule set under a lock. State for rules that
+// remain (matched by Name) is preserved so a rule that's already
+// firing doesn't re-fire on every reload. State for rules that
+// disappear is discarded.
+func (m *Manager) SetRules(rules []Rule) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.rules = append(m.rules[:0:0], rules...) // copy
+	keep := make(map[string]*ruleState, len(rules))
+	for _, r := range rules {
+		if st, ok := m.state[r.Name]; ok {
+			keep[r.Name] = st
+		}
+	}
+	m.state = keep
+}
+
 // EvaluateOnce runs one evaluation cycle across every rule.
 func (m *Manager) EvaluateOnce(ctx context.Context) {
-	for _, r := range m.rules {
+	m.mu.Lock()
+	rules := append([]Rule(nil), m.rules...) // snapshot under lock
+	m.mu.Unlock()
+	for _, r := range rules {
 		m.evaluateRule(ctx, r)
 	}
 }
 
 func (m *Manager) evaluateRule(ctx context.Context, r Rule) {
+	m.mu.Lock()
 	st, ok := m.state[r.Name]
 	if !ok {
 		st = &ruleState{}
 		m.state[r.Name] = st
 	}
+	m.mu.Unlock()
 
 	value, labels, ok := m.currentValue(r)
 	if !ok {

@@ -161,6 +161,53 @@ func TestQueryFailureDoesNotResolve(t *testing.T) {
 	}
 }
 
+func TestSetRulesPreservesStateForKeptRules(t *testing.T) {
+	q := &fakeQuerier{value: 0.9, ok: true}
+	w := &capturingWebhook{}
+	rules := []Rule{{Name: "r", Expr: "x", Op: ">", Threshold: 0.5, For: 0}}
+
+	now := time.Now()
+	m := newManager(q, w, rules, func() time.Time { return now })
+
+	m.EvaluateOnce(context.Background()) // fire
+	if len(w.all()) != 1 {
+		t.Fatalf("setup: expected 1 event, got %d", len(w.all()))
+	}
+
+	// Replace with the same rule. State should carry over so we do
+	// NOT re-fire while still above threshold.
+	m.SetRules(rules)
+	now = now.Add(time.Second)
+	m.EvaluateOnce(context.Background())
+	if got := len(w.all()); got != 1 {
+		t.Errorf("after SetRules with same rule: %d events, want 1", got)
+	}
+}
+
+func TestSetRulesAddsAndRemovesRules(t *testing.T) {
+	q := &fakeQuerier{value: 0.9, ok: true}
+	w := &capturingWebhook{}
+	rules := []Rule{{Name: "r1", Expr: "x", Op: ">", Threshold: 0.5, For: 0}}
+
+	now := time.Now()
+	m := newManager(q, w, rules, func() time.Time { return now })
+
+	m.EvaluateOnce(context.Background()) // r1 fires
+
+	// Replace r1 with r2 (new name). r1's state is discarded.
+	m.SetRules([]Rule{{Name: "r2", Expr: "x", Op: ">", Threshold: 0.5, For: 0}})
+	now = now.Add(time.Second)
+	m.EvaluateOnce(context.Background()) // r2 fires for the first time
+
+	evs := w.all()
+	if len(evs) != 2 {
+		t.Fatalf("events = %d, want 2 (one per rule)", len(evs))
+	}
+	if evs[0].Rule != "r1" || evs[1].Rule != "r2" {
+		t.Errorf("rules = %q, %q", evs[0].Rule, evs[1].Rule)
+	}
+}
+
 func TestCompareOps(t *testing.T) {
 	cases := []struct {
 		op   string
