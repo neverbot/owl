@@ -61,7 +61,11 @@ func (e *Engine) QueryRange(expr string, from, to, step int64) (Result, error) {
 func (e *Engine) Capabilities() Capabilities {
 	return Capabilities{
 		Functions: []string{"rate", "irate", "increase"},
-		Aggrs:     []string{"sum", "avg", "min", "max", "count", "sum_by", "avg_by", "min_by", "max_by", "count_by"},
+		Aggrs: []string{
+			"sum", "avg", "min", "max", "count",
+			"sum_by", "avg_by", "min_by", "max_by", "count_by",
+			"sum_without", "avg_without", "min_without", "max_without", "count_without",
+		},
 		Matchers:  []string{"=", "!=", "=~", "!~"},
 		Operators: []string{"+", "-", "*", "/"},
 	}

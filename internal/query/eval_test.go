@@ -301,6 +301,66 @@ func TestEvalSumBy(t *testing.T) {
 	}
 }
 
+func TestEvalSumWithout(t *testing.T) {
+	// Three series differing only in `host`. `sum without (host)` should
+	// drop the host label and collapse them by the remaining `job` label.
+	q := newFakeQuerier()
+	q.addSeries("reqs", map[string]string{"job": "api", "host": "h1"}, []storage.Point{{TS: 1000, Value: 10}})
+	q.addSeries("reqs", map[string]string{"job": "api", "host": "h2"}, []storage.Point{{TS: 1000, Value: 20}})
+	q.addSeries("reqs", map[string]string{"job": "worker", "host": "h3"}, []storage.Point{{TS: 1000, Value: 5}})
+
+	node, err := Parse("sum without (host) (reqs)")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ev := newEvaluator(q, 0, 2000)
+	series, err := ev.eval(node)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(series) != 2 {
+		t.Fatalf("want 2 groups (api, worker), got %d", len(series))
+	}
+	byJob := make(map[string]float64)
+	for _, s := range series {
+		if _, present := s.Labels["host"]; present {
+			t.Errorf("expected `host` to be dropped, got %v", s.Labels)
+		}
+		byJob[s.Labels["job"]] = s.Points[0].Value
+	}
+	if byJob["api"] != 30 {
+		t.Errorf("sum without (host) job=api: want 30, got %v", byJob["api"])
+	}
+	if byJob["worker"] != 5 {
+		t.Errorf("sum without (host) job=worker: want 5, got %v", byJob["worker"])
+	}
+}
+
+func TestEvalSumWithoutCollapsesToSingle(t *testing.T) {
+	// Two series differing only in `host`. `sum without (host)` collapses
+	// them into a single output series with empty labels.
+	q := newFakeQuerier()
+	q.addSeries("reqs", map[string]string{"host": "a"}, []storage.Point{{TS: 1000, Value: 3}})
+	q.addSeries("reqs", map[string]string{"host": "b"}, []storage.Point{{TS: 1000, Value: 4}})
+
+	node, err := Parse("sum without (host) (reqs)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := newEvaluator(q, 0, 2000)
+	series, err := ev.eval(node)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(series) != 1 {
+		t.Fatalf("want 1 collapsed series, got %d", len(series))
+	}
+	if series[0].Points[0].Value != 7 {
+		t.Errorf("sum: want 7, got %v", series[0].Points[0].Value)
+	}
+}
+
 func TestEvalBinaryOpScalarRight(t *testing.T) {
 	q := newFakeQuerier()
 	q.addSeries("cpu", map[string]string{"host": "a"}, []storage.Point{{TS: 1000, Value: 10}})

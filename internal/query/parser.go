@@ -364,32 +364,29 @@ func (p *parser) parseLabelMatcher() (LabelMatcher, error) {
 	return LabelMatcher{Name: name, Op: op, Value: val}, nil
 }
 
+// parseAggregation parses an aggregation expression of the form
+// `op (expr)`, `op by (labels) (expr)`, or `op without (labels) (expr)`.
+// The current token is the aggregation operator identifier when called.
+// At most one of `by` and `without` may appear on a given aggregation.
 func (p *parser) parseAggregation() (*AggregationNode, error) {
 	op := p.cur.val
 	p.consume() // consume agg keyword
 
-	var by []string
-	// Check for "by (labels)" clause before the expression.
-	if p.cur.kind == tokIdent && p.cur.val == "by" {
-		p.consume() // consume "by"
-		if p.cur.kind != tokLParen {
-			return nil, fmt.Errorf("parse: expected '(' after 'by', got %q", p.cur.val)
+	var by, without []string
+	// Check for an optional "by (labels)" or "without (labels)" clause
+	// before the expression. Only one of the two is allowed.
+	if p.cur.kind == tokIdent && (p.cur.val == "by" || p.cur.val == "without") {
+		keyword := p.cur.val
+		p.consume() // consume "by" / "without"
+		labels, err := p.parseLabelList(keyword)
+		if err != nil {
+			return nil, err
 		}
-		p.consume() // consume (
-		for p.cur.kind != tokRParen {
-			if p.cur.kind == tokEOF {
-				return nil, fmt.Errorf("parse: unterminated by clause")
-			}
-			if p.cur.kind != tokIdent {
-				return nil, fmt.Errorf("parse: expected label name in by clause, got %q", p.cur.val)
-			}
-			by = append(by, p.cur.val)
-			p.consume()
-			if p.cur.kind == tokComma {
-				p.consume()
-			}
+		if keyword == "by" {
+			by = labels
+		} else {
+			without = labels
 		}
-		p.consume() // consume )
 	}
 
 	if p.cur.kind != tokLParen {
@@ -407,7 +404,34 @@ func (p *parser) parseAggregation() (*AggregationNode, error) {
 	}
 	p.consume() // consume )
 
-	return &AggregationNode{Op: op, By: by, Expr: inner}, nil
+	return &AggregationNode{Op: op, By: by, Without: without, Expr: inner}, nil
+}
+
+// parseLabelList parses a parenthesised, comma-separated list of label
+// names: `( a, b, c )`. keyword is the modifier name ("by" or "without")
+// and is only used in error messages. The opening '(' is required even
+// for an empty list.
+func (p *parser) parseLabelList(keyword string) ([]string, error) {
+	if p.cur.kind != tokLParen {
+		return nil, fmt.Errorf("parse: expected '(' after %q, got %q", keyword, p.cur.val)
+	}
+	p.consume() // consume (
+	var labels []string
+	for p.cur.kind != tokRParen {
+		if p.cur.kind == tokEOF {
+			return nil, fmt.Errorf("parse: unterminated %s clause", keyword)
+		}
+		if p.cur.kind != tokIdent {
+			return nil, fmt.Errorf("parse: expected label name in %s clause, got %q", keyword, p.cur.val)
+		}
+		labels = append(labels, p.cur.val)
+		p.consume()
+		if p.cur.kind == tokComma {
+			p.consume()
+		}
+	}
+	p.consume() // consume )
+	return labels, nil
 }
 
 // rangeFuncs lists the range-vector functions the parser recognises.

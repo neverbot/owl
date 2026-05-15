@@ -62,11 +62,19 @@ type RangeFuncNode struct {
 
 func (*RangeFuncNode) nodeMarker() {}
 
-// AggregationNode represents sum/avg/min/max/count, optionally with by(labels).
+// AggregationNode represents sum/avg/min/max/count, optionally with
+// a by(labels) or without(labels) modifier.
+//
+// At most one of By and Without is non-nil. By keeps only the listed
+// labels in the output (everything else is dropped and merged).
+// Without drops the listed labels and groups by every remaining label
+// found across the input series. When both are nil the aggregation
+// collapses every input series into one.
 type AggregationNode struct {
-	Op   string   // "sum", "avg", "min", "max", "count"
-	By   []string // nil means no grouping
-	Expr Node
+	Op      string   // "sum", "avg", "min", "max", "count"
+	By      []string // nil means no by-grouping
+	Without []string // nil means no without-grouping
+	Expr    Node
 }
 
 func (*AggregationNode) nodeMarker() {}

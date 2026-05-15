@@ -208,11 +208,13 @@ count(expr)
 sum   by (job)      (rate(http_requests_total[1m]))
 avg   by (instance) (cpu_usage)
 count by (status)   (http_requests_total)
+
+sum without (instance, replica) (http_requests_total)
 ```
 
 Operators: `sum`, `avg`, `min`, `max`, `count`. The `by (labels)` form
-groups output series by the listed labels. `without (labels)` is **not**
-implemented yet.
+groups output series by the listed labels; the `without (labels)` form
+drops the listed labels and groups by every label that remains.
 
 **Arithmetic**
 
@@ -252,8 +254,6 @@ as "unsupported" with the engine's reason. PRs welcome.
 `sort`/`sort_desc`, `absent`/`absent_over_time`, `changes`, `resets`.
 
 **Aggregation operators**: `stddev`, `stdvar`, `quantile`.
-
-**Aggregation modifiers**: `without (labels)` (only `by` is supported).
 
 **Vector-matching modifiers**: `on(labels)`, `ignoring(labels)`,
 `group_left`/`group_right` — matching is exact-label-set only.

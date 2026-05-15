@@ -264,15 +264,50 @@ func computeRate(pts []storage.Point) float64 {
 }
 
 // evalAggregation evaluates the inner expression then aggregates.
+// A non-empty Without is resolved into the equivalent By list at eval
+// time: every label seen on any input series, minus the ones the
+// caller asked to drop. With no modifier the aggregation collapses
+// every series into a single output series.
 func (e *evaluator) evalAggregation(n *AggregationNode) ([]storage.Series, error) {
 	inner, err := e.eval(n.Expr)
 	if err != nil {
 		return nil, err
 	}
+	if len(n.Without) > 0 {
+		by := computeWithoutGroupKey(inner, n.Without)
+		return aggregateBy(n.Op, by, inner)
+	}
 	if len(n.By) == 0 {
 		return aggregateAll(n.Op, inner)
 	}
 	return aggregateBy(n.Op, n.By, inner)
+}
+
+// computeWithoutGroupKey returns the sorted set of label names that
+// remain after removing `without` from the union of labels found on
+// any series in `inner`. The result is suitable as the `by` list for
+// aggregateBy and is stable across calls so output ordering is
+// deterministic.
+func computeWithoutGroupKey(inner []storage.Series, without []string) []string {
+	drop := make(map[string]struct{}, len(without))
+	for _, k := range without {
+		drop[k] = struct{}{}
+	}
+	seen := make(map[string]struct{})
+	for _, s := range inner {
+		for k := range s.Labels {
+			if _, skip := drop[k]; skip {
+				continue
+			}
+			seen[k] = struct{}{}
+		}
+	}
+	keys := make([]string, 0, len(seen))
+	for k := range seen {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // aggregateAll collapses all series into one.

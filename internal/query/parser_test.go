@@ -210,6 +210,29 @@ func TestParseAggregationWithBy(t *testing.T) {
 	}
 }
 
+func TestParseAggregationWithWithout(t *testing.T) {
+	node, err := Parse("sum without (instance, replica) (http_requests_total)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	agg, ok := node.(*AggregationNode)
+	if !ok {
+		t.Fatalf("expected *AggregationNode, got %T", node)
+	}
+	if agg.Op != "sum" {
+		t.Errorf("op: want sum, got %q", agg.Op)
+	}
+	if agg.By != nil {
+		t.Errorf("by: want nil, got %v", agg.By)
+	}
+	if len(agg.Without) != 2 || agg.Without[0] != "instance" || agg.Without[1] != "replica" {
+		t.Errorf("without: want [instance replica], got %v", agg.Without)
+	}
+	if _, ok := agg.Expr.(*SelectorNode); !ok {
+		t.Errorf("inner: expected *SelectorNode, got %T", agg.Expr)
+	}
+}
+
 func TestParseBinaryOpScalarRight(t *testing.T) {
 	node, err := Parse("http_requests_total * 2")
 	if err != nil {
