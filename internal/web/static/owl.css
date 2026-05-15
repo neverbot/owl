@@ -1,0 +1,20 @@
+:root {
+  --fg: #1a1a1a;
+  --muted: #777;
+  --bg: #fafafa;
+  --line: #1a1a1a;
+  --grid: #e4e4e4;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 960px; margin: 0 auto; padding: 2.5rem 1.5rem; }
+h1 { font-size: 1.25rem; font-weight: 500; margin: 0 0 0.25rem; letter-spacing: -0.01em; }
+.hint { color: var(--muted); margin: 0 0 2rem; font-size: 0.875rem; }
+.panel { background: #fff; border: 1px solid var(--grid); border-radius: 4px;
+  padding: 1rem 1.25rem; margin-bottom: 1rem; }
+.panel h2 { font-size: 0.8125rem; font-weight: 500; margin: 0 0 0.5rem;
+  color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.panel svg { display: block; width: 100%; height: 80px; }
+.panel .last { display: block; font-variant-numeric: tabular-nums; font-size: 1.5rem;
+  margin-top: 0.5rem; }

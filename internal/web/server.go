@@ -2,12 +2,18 @@
 package web
 
 import (
+	"embed"
+	"io/fs"
 	"net/http"
+	"strings"
 
 	"github.com/neverbot/owl/internal/storage"
 )
 
-// Options configures the HTTP server. All fields are optional in tests.
+//go:embed static/*
+var staticFS embed.FS
+
+// Options configures the HTTP server.
 type Options struct {
 	Store *storage.Store
 }
@@ -28,7 +34,6 @@ func NewServer(opt Options) *Server {
 	return s
 }
 
-// ServeHTTP dispatches the request to the internal mux.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r)
 }
@@ -36,4 +41,33 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/-/healthy", s.healthy)
 	s.mux.HandleFunc("/api/query", s.apiQuery)
+	s.mux.HandleFunc("/", s.indexOrStatic)
+}
+
+func (s *Server) indexOrStatic(w http.ResponseWriter, r *http.Request) {
+	switch {
+	case r.URL.Path == "/":
+		s.serveStatic(w, r, "static/index.html")
+	case strings.HasPrefix(r.URL.Path, "/static/"):
+		s.serveStatic(w, r, "static/"+r.URL.Path[len("/static/"):])
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request, name string) {
+	data, err := fs.ReadFile(staticFS, name)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	switch {
+	case strings.HasSuffix(name, ".html"):
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	case strings.HasSuffix(name, ".js"):
+		w.Header().Set("Content-Type", "application/javascript")
+	case strings.HasSuffix(name, ".css"):
+		w.Header().Set("Content-Type", "text/css")
+	}
+	_, _ = w.Write(data)
 }

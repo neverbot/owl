@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>owl</title>
+  <link rel="stylesheet" href="/static/owl.css">
+</head>
+<body>
+  <main>
+    <h1>owl</h1>
+    <p class="hint">Runtime self-metrics, polling every 2 s.</p>
+    <section id="panels">
+      <article class="panel" data-metric="owl_runtime_goroutines"><h2>goroutines</h2><svg></svg><span class="last"></span></article>
+      <article class="panel" data-metric="owl_runtime_alloc_bytes"><h2>alloc bytes</h2><svg></svg><span class="last"></span></article>
+      <article class="panel" data-metric="owl_runtime_gc_pause_total_ms"><h2>gc pause total (ms)</h2><svg></svg><span class="last"></span></article>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>
