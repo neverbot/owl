@@ -24,6 +24,12 @@ type Options struct {
 	Store  *storage.Store
 	Engine *query.Engine
 	Loader *dashboards.Loader
+	// OnReload is invoked when a client POSTs to /-/reload (or the
+	// process receives SIGHUP; that wiring lives in cmd/owl). The
+	// hook is responsible for re-reading the config file and the
+	// dashboards directory and swapping them in atomically. If
+	// OnReload is nil, /-/reload returns 503 with a clear message.
+	OnReload func() error
 }
 
 // Server is an http.Handler routing all of Owl's HTTP traffic.
@@ -51,6 +57,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/-/healthy", s.healthy)
+	s.mux.HandleFunc("/-/reload", s.reload)
 	s.mux.HandleFunc("/api/query", s.apiQuery)
 	s.mux.HandleFunc("/api/dashboards/", s.apiDashboardByID)
 	s.mux.HandleFunc("/api/dashboards", s.apiDashboards)

@@ -54,7 +54,7 @@ func main() {
 		return
 	}
 
-	if err := run(cfg); err != nil {
+	if err := run(cfg, configPath); err != nil {
 		fail(err)
 	}
 }
@@ -64,7 +64,7 @@ func fail(err error) {
 	os.Exit(2)
 }
 
-func run(cfg config.Config) error {
+func run(cfg config.Config, configPath string) error {
 	if err := ensureDir(cfg.Storage.Path); err != nil {
 		return fmt.Errorf("storage dir: %w", err)
 	}
@@ -175,12 +175,51 @@ func run(cfg config.Config) error {
 		return fmt.Errorf("dashboards: %w", err)
 	}
 
+	// reload re-reads config.yml and dashboards/*.json atomically. It
+	// is wired to both SIGHUP and POST /-/reload. Scrape targets and
+	// alert rules captured at startup do NOT update yet — those take
+	// a process restart. Dashboard JSON does take effect immediately
+	// (the loader holds the new index atomically).
+	reload := func() error {
+		newCfg, err := config.Load(configPath)
+		if err != nil {
+			return fmt.Errorf("config: %w", err)
+		}
+		config.ApplyEnv(&newCfg)
+		if err := config.Validate(&newCfg); err != nil {
+			return fmt.Errorf("config invalid: %w", err)
+		}
+		if err := dashLoader.Reload(); err != nil {
+			return fmt.Errorf("dashboards: %w", err)
+		}
+		fmt.Fprintln(os.Stderr, "owl: reloaded config and dashboards")
+		return nil
+	}
+
+	// Wire SIGHUP to the same hook. SIGHUP is the conventional
+	// "re-read your config" signal on Unix.
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-hup:
+				if err := reload(); err != nil {
+					fmt.Fprintf(os.Stderr, "owl: reload failed: %v\n", err)
+				}
+			}
+		}
+	}()
+
 	srv := &http.Server{
 		Addr: cfg.Listen,
 		Handler: web.NewServer(web.Options{
-			Store:  store,
-			Engine: engine,
-			Loader: dashLoader,
+			Store:    store,
+			Engine:   engine,
+			Loader:   dashLoader,
+			OnReload: reload,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
