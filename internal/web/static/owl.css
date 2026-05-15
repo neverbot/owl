@@ -62,13 +62,13 @@
 
 /* Dark theme — lift lightness on accent and series for perceptual parity */
 :root[data-theme="dark"] {
-  --bg:          oklch(0.16 0.008 80);
-  --bg-elevated: oklch(0.20 0.007 80);
+  --bg:          oklch(0.205 0.008 80);
+  --bg-elevated: oklch(0.245 0.007 80);
   --fg:          oklch(0.94 0.004 80);
-  --muted:       oklch(0.65 0.005 80);
-  --subtle:      oklch(0.45 0.005 80);
-  --rule:        oklch(0.26 0.006 80);
-  --grid-line:   oklch(0.24 0.006 80);
+  --muted:       oklch(0.66 0.005 80);
+  --subtle:      oklch(0.48 0.005 80);
+  --rule:        oklch(0.30 0.006 80);
+  --grid-line:   oklch(0.28 0.006 80);
   --focus-ring:  oklch(0.70 0.13 0 / 0.45);
 
   --accent:    oklch(0.70 0.13 0);
