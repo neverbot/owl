@@ -15,6 +15,15 @@ scrape:
   default_interval: 5s
   default_timeout: 2s
 
+# Optional explicit scrape targets. Containers with owl.scrape labels
+# are discovered automatically (see docker.discovery below), so this
+# list usually stays short.
+targets:
+  - name: owl-self
+    url: "http://127.0.0.1:9090/metrics"
+    labels:
+      job: owl
+
 # Docker integration. Both features share one socket connection;
 # enable each one independently.
 docker:

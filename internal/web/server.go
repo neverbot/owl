@@ -58,6 +58,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/-/healthy", s.healthy)
 	s.mux.HandleFunc("/-/reload", s.reload)
+	s.mux.HandleFunc("/metrics", s.metrics)
 	s.mux.HandleFunc("/api/query", s.apiQuery)
 	s.mux.HandleFunc("/api/dashboards/", s.apiDashboardByID)
 	s.mux.HandleFunc("/api/dashboards", s.apiDashboards)
