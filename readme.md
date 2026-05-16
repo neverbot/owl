@@ -8,11 +8,19 @@ Prometheus + Grafana is too heavy and a SaaS funnel is the wrong shape.
 
 - Scrapes Prometheus-format `/metrics` endpoints on an interval,
   parses the text exposition format, persists samples to SQLite.
-- Emits self-metrics from the Go runtime (`owl_runtime_goroutines`,
-  `owl_runtime_alloc_bytes`, `owl_runtime_gc_pause_total_ms`) so the
-  binary always has something to show, and exposes a
-  Prometheus-format `/metrics` endpoint that can be scraped by owl
-  itself or by an external Prometheus.
+- Self-observability through two complementary paths:
+  - A built-in runtime collector writes `owl_runtime_goroutines`,
+    `owl_runtime_alloc_bytes` and `owl_runtime_gc_pause_total_ms`
+    directly to storage on every tick, so the bundled Owl Runtime
+    dashboard always has data without any extra wiring.
+  - A separate `/metrics` HTTP endpoint exposes a wider set of
+    process and subsystem gauges (`owl_goroutines`,
+    `owl_storage_samples_total`, `owl_storage_size_bytes`,
+    `owl_dashboards_loaded`, `owl_alerts_*`) in Prometheus text
+    exposition format. The payload is generated on demand on each
+    request — it is **not** persisted by itself. To use these in
+    queries or alerts, add an owl-self target to `scrape:` so owl
+    scrapes its own `/metrics`.
 - Optional Linux host collector reading `/proc` (CPU per mode, load
   average, memory, network, disk). Off by default, enabled per
   `host.enabled` in the config.
@@ -324,10 +332,26 @@ The `/metrics` payload covers process vitals (`owl_goroutines`,
 `owl_storage_size_bytes`), the loaded dashboard count
 (`owl_dashboards_loaded`) and alerter counters
 (`owl_alerts_evaluations_total`, `owl_alerts_webhook_sends_total`,
-`owl_alerts_webhook_failures_total`, `owl_alerts_firing`). Wire owl
-to scrape itself in `targets:` to persist these into the same
-storage and build "alerter is broken" alerts against
-`owl_alerts_webhook_failures_total` or `owl_alerts_evaluations_total`.
+`owl_alerts_webhook_failures_total`, `owl_alerts_firing`).
+
+These differ from `owl_runtime_*` (written directly to storage by
+the runtime collector) — `/metrics` is generated on each HTTP
+request and not persisted unless something scrapes it. To persist
+these so you can query them historically or alert on them, add an
+owl-self target to `targets:`:
+
+```yaml
+targets:
+  - name: owl-self
+    url: "http://127.0.0.1:9090/metrics"
+    interval: 60s
+    labels:
+      job: owl
+```
+
+With that in place, `increase(owl_alerts_webhook_failures_total[10m])`
+or `increase(owl_alerts_evaluations_total[5m]) < 1` are valid alert
+expressions for catching a stuck alerter.
 
 Times are millisecond Unix timestamps.
 
