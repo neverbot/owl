@@ -84,7 +84,7 @@ func ParseDashboard(id string, data []byte) (*Dashboard, error) {
 				W: gp.GridPos.W,
 				H: gp.GridPos.H,
 			},
-			Unit: gp.FieldConfig.Defaults.Unit,
+			Unit: normaliseUnit(gp.FieldConfig.Defaults.Unit),
 		}
 		for _, gt := range gp.Targets {
 			p.Targets = append(p.Targets, Target{
@@ -136,4 +136,18 @@ func parseRefresh(s string) time.Duration {
 		return time.Duration(n * float64(time.Second))
 	}
 	return d
+}
+
+// normaliseUnit collapses Grafana's "no specific unit" sentinels into
+// an empty string. Grafana exports use "short" (compact number, no
+// unit) and "none" interchangeably for dimensionless quantities;
+// surfacing either string in the panel corner is noise that does not
+// help an operator read the chart, so we drop them.
+func normaliseUnit(u string) string {
+	switch u {
+	case "short", "none":
+		return ""
+	default:
+		return u
+	}
 }

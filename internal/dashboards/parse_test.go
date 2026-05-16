@@ -53,8 +53,8 @@ func TestParseDashboard_Runtime(t *testing.T) {
 	if p0.GridPos != (GridPos{X: 0, Y: 0, W: 12, H: 8}) {
 		t.Errorf("Panels[0].GridPos = %+v, want {0 0 12 8}", p0.GridPos)
 	}
-	if p0.Unit != "short" {
-		t.Errorf("Panels[0].Unit = %q, want %q", p0.Unit, "short")
+	if p0.Unit != "" {
+		t.Errorf("Panels[0].Unit = %q, want %q (\"short\" should normalise to empty)", p0.Unit, "")
 	}
 	if len(p0.Targets) != 1 {
 		t.Fatalf("Panels[0].Targets len = %d, want 1", len(p0.Targets))
@@ -159,5 +159,22 @@ func TestParseDashboard_InvalidJSON(t *testing.T) {
 	_, err := ParseDashboard("bad", []byte(`{not valid json`))
 	if err == nil {
 		t.Error("expected error for invalid JSON")
+	}
+}
+
+func TestNormaliseUnit(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"", ""},
+		{"short", ""},
+		{"none", ""},
+		{"bytes", "bytes"},
+		{"s", "s"},
+		{"ops", "ops"},
+		{"Short", "Short"}, // case-sensitive; Grafana exports always lowercase
+	}
+	for _, c := range cases {
+		if got := normaliseUnit(c.in); got != c.want {
+			t.Errorf("normaliseUnit(%q) = %q, want %q", c.in, got, c.want)
+		}
 	}
 }
