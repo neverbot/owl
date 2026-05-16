@@ -8,19 +8,14 @@ Prometheus + Grafana is too heavy and a SaaS funnel is the wrong shape.
 
 - Scrapes Prometheus-format `/metrics` endpoints on an interval,
   parses the text exposition format, persists samples to SQLite.
-- Self-observability through two complementary paths:
-  - A built-in runtime collector writes `owl_runtime_goroutines`,
-    `owl_runtime_alloc_bytes` and `owl_runtime_gc_pause_total_ms`
-    directly to storage on every tick, so the bundled Owl Runtime
-    dashboard always has data without any extra wiring.
-  - A separate `/metrics` HTTP endpoint exposes a wider set of
-    process and subsystem gauges (`owl_goroutines`,
-    `owl_storage_samples_total`, `owl_storage_size_bytes`,
-    `owl_dashboards_loaded`, `owl_alerts_*`) in Prometheus text
-    exposition format. The payload is generated on demand on each
-    request — it is **not** persisted by itself. To use these in
-    queries or alerts, add an owl-self target to `scrape:` so owl
-    scrapes its own `/metrics`.
+- Self-observability through a single Prometheus-format `/metrics`
+  endpoint that exposes process vitals (`owl_goroutines`,
+  `owl_heap_objects_bytes`, `owl_gc_pause_seconds_total`), storage
+  stats (`owl_storage_samples_total`, `owl_storage_size_bytes`,
+  `owl_dashboards_loaded`) and alerter counters (`owl_alerts_*`).
+  Owl scrapes itself by default so these land in storage and the
+  bundled **Owl Health** dashboard renders them out of the box;
+  external Prometheus servers can scrape the same endpoint.
 - Optional Linux host collector reading `/proc` (CPU per mode, load
   average, memory, network, disk). Off by default, enabled per
   `host.enabled` in the config.
@@ -72,8 +67,9 @@ docker compose up
 ```
 
 Then browse to `http://localhost:9090/`. You should see the bundled
-**Owl Runtime** dashboard with three panels driven by the binary's own
-Go runtime metrics, updating every few seconds.
+**Owl Health** dashboard plotting the binary's own goroutines, heap,
+GC pauses, storage size and alerter activity — owl scrapes its own
+`/metrics` endpoint, so panels populate within one scrape interval.
 
 `docker compose up` pulls
 [`ghcr.io/neverbot/owl:master`](https://github.com/neverbot/owl/pkgs/container/owl)
@@ -328,30 +324,30 @@ down.
 | `GET /static/*` | Embedded JS / CSS assets |
 
 The `/metrics` payload covers process vitals (`owl_goroutines`,
-`owl_heap_objects_bytes`), storage stats (`owl_storage_samples_total`,
-`owl_storage_size_bytes`), the loaded dashboard count
-(`owl_dashboards_loaded`) and alerter counters
-(`owl_alerts_evaluations_total`, `owl_alerts_webhook_sends_total`,
-`owl_alerts_webhook_failures_total`, `owl_alerts_firing`).
+`owl_heap_objects_bytes`, `owl_gc_pause_seconds_total`), storage
+stats (`owl_storage_samples_total`, `owl_storage_size_bytes`), the
+loaded dashboard count (`owl_dashboards_loaded`) and alerter
+counters (`owl_alerts_evaluations_total`,
+`owl_alerts_webhook_sends_total`, `owl_alerts_webhook_failures_total`,
+`owl_alerts_firing`). The payload is rendered on demand on each GET
+— nothing is persisted until something scrapes it.
 
-These differ from `owl_runtime_*` (written directly to storage by
-the runtime collector) — `/metrics` is generated on each HTTP
-request and not persisted unless something scrapes it. To persist
-these so you can query them historically or alert on them, add an
-owl-self target to `targets:`:
+The bundled `examples/config.yml` already includes an `owl-self`
+target so owl scrapes itself by default:
 
 ```yaml
 targets:
   - name: owl-self
     url: "http://127.0.0.1:9090/metrics"
-    interval: 60s
     labels:
       job: owl
 ```
 
-With that in place, `increase(owl_alerts_webhook_failures_total[10m])`
-or `increase(owl_alerts_evaluations_total[5m]) < 1` are valid alert
-expressions for catching a stuck alerter.
+Drop or override this entry to point an external Prometheus at the
+same endpoint instead. With self-scrape on, expressions like
+`increase(owl_alerts_webhook_failures_total[10m]) > 0` or
+`rate(owl_alerts_evaluations_total[5m]) == 0` become valid alert
+rules to catch a stuck alerter or a broken webhook receiver.
 
 Times are millisecond Unix timestamps.
 
@@ -428,7 +424,7 @@ alerts:
   # webhook_url: "http://172.17.0.1:9091/alert"          # Linux
   rules:
     - name: smoke_test
-      expr: "owl_runtime_goroutines"
+      expr: "owl_goroutines"
       op: ">"
       threshold: 0
       for: 0s

@@ -19,7 +19,6 @@ import (
 
 	"github.com/neverbot/owl/internal/alert"
 	"github.com/neverbot/owl/internal/collect/host"
-	rtcollect "github.com/neverbot/owl/internal/collect/runtime"
 	"github.com/neverbot/owl/internal/config"
 	"github.com/neverbot/owl/internal/dashboards"
 	"github.com/neverbot/owl/internal/docker"
@@ -121,9 +120,6 @@ func run(cfg config.Config, configPath string) error {
 		Interval: 5 * time.Minute,
 	}
 	spawn(func() { retention.Run(ctx) })
-
-	collector := rtcollect.New(store, cfg.Scrape.DefaultInterval)
-	spawn(func() { collector.Run(ctx) })
 
 	// Optional Linux host collector (/proc + /sys). Disabled by default
 	// because /proc does not exist on every platform owl might run on

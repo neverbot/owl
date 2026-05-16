@@ -2,6 +2,7 @@ package web
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"runtime"
 	rtmetrics "runtime/metrics"
@@ -29,9 +30,14 @@ func (s *Server) metrics(w http.ResponseWriter, r *http.Request) {
 		"gauge",
 		float64(runtime.NumGoroutine()))
 
-	// Allocated heap bytes via runtime/metrics.
+	// Allocated heap bytes and cumulative GC pause time via
+	// runtime/metrics. GC pause is reported as a histogram of pause
+	// durations; we surface the integral (total seconds spent paused
+	// since process start) which is what an operator actually wants
+	// to plot or alert on.
 	samples := []rtmetrics.Sample{
 		{Name: "/memory/classes/heap/objects:bytes"},
+		{Name: "/gc/pauses:seconds"},
 	}
 	rtmetrics.Read(samples)
 	if samples[0].Value.Kind() == rtmetrics.KindUint64 {
@@ -39,6 +45,12 @@ func (s *Server) metrics(w http.ResponseWriter, r *http.Request) {
 			"Bytes of currently live heap objects.",
 			"gauge",
 			float64(samples[0].Value.Uint64()))
+	}
+	if samples[1].Value.Kind() == rtmetrics.KindFloat64Histogram {
+		emit(w, "owl_gc_pause_seconds_total",
+			"Cumulative time spent in GC stop-the-world pauses since process start.",
+			"counter",
+			gcPauseTotalSeconds(samples[1].Value.Float64Histogram()))
 	}
 
 	// Storage stats.
@@ -95,4 +107,27 @@ func emit(w http.ResponseWriter, name, help, kind string, v float64) {
 	fmt.Fprintf(w, "# HELP %s %s\n", name, help)
 	fmt.Fprintf(w, "# TYPE %s %s\n", name, kind)
 	fmt.Fprintf(w, "%s %g\n", name, v)
+}
+
+// gcPauseTotalSeconds collapses the runtime/metrics GC-pause histogram
+// into a single cumulative-seconds value by summing each bucket's
+// midpoint times its count. Buckets with an infinite boundary are
+// skipped — they would contribute NaN to the sum and SQLite STRICT
+// rejects NaN values when the metric is later persisted via scrape.
+func gcPauseTotalSeconds(h *rtmetrics.Float64Histogram) float64 {
+	var total float64
+	for i, count := range h.Counts {
+		if i+1 >= len(h.Buckets) {
+			break
+		}
+		lo, hi := h.Buckets[i], h.Buckets[i+1]
+		if math.IsInf(lo, 0) || math.IsInf(hi, 0) {
+			continue
+		}
+		total += float64(count) * (lo + hi) / 2
+	}
+	if math.IsNaN(total) || math.IsInf(total, 0) {
+		return 0
+	}
+	return total
 }

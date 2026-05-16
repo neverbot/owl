@@ -1,0 +1,104 @@
+{
+  "title": "Owl Health",
+  "uid": "owl-health",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Goroutines",
+      "description": "Live goroutines in the owl process. A steady, low line means the worker pool is healthy; a slow climb usually means a goroutine leak.",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0 } },
+      "targets": [
+        { "refId": "A", "expr": "owl_goroutines", "legendFormat": "goroutines" }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Heap allocated",
+      "description": "Bytes of live heap objects, before GC. Reflects the Go process working set, not Linux RSS — file-cache attribution is excluded.",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "bytes", "min": 0 } },
+      "targets": [
+        { "refId": "A", "expr": "owl_heap_objects_bytes", "legendFormat": "heap" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "GC pause (last 5 min)",
+      "description": "Total seconds spent in GC stop-the-world pauses over the last 5 minutes. Persistent spikes here translate directly into request-latency jitter.",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "s", "min": 0 } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        { "refId": "A", "expr": "increase(owl_gc_pause_seconds_total[5m])", "legendFormat": "gc pause" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Samples in storage",
+      "description": "Rows in the SQLite samples table. Climbs until a retention policy starts pruning.",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0 } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        { "refId": "A", "expr": "owl_storage_samples_total", "legendFormat": "samples" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Storage size on disk",
+      "description": "On-disk size of the SQLite database. The shape of this line is the canonical signal for the dual time/size retention policy.",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "bytes", "min": 0 } },
+      "targets": [
+        { "refId": "A", "expr": "owl_storage_size_bytes", "legendFormat": "db size" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Alerts firing",
+      "description": "Distinct (rule, series) lineages currently in the firing state. Should be 0 most of the time.",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0 } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        { "refId": "A", "expr": "owl_alerts_firing", "legendFormat": "firing" }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Alerter evaluations / s",
+      "description": "Rate of alert-rule evaluation cycles. A flat line at zero (when rules are configured) means the alerter has stopped looping.",
+      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0 } },
+      "targets": [
+        { "refId": "A", "expr": "rate(owl_alerts_evaluations_total[5m])", "legendFormat": "evals/s" }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Webhook activity",
+      "description": "Webhook deliveries per second, split between successful sends and failures. A sustained failures line over zero means the webhook receiver is unreachable or rejecting events.",
+      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0 } },
+      "targets": [
+        { "refId": "A", "expr": "rate(owl_alerts_webhook_sends_total[5m])",    "legendFormat": "sends" },
+        { "refId": "B", "expr": "rate(owl_alerts_webhook_failures_total[5m])", "legendFormat": "failures" }
+      ]
+    }
+  ]
+}
