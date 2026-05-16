@@ -101,7 +101,7 @@ storage:
     size: 500MB
 
 scrape:
-  default_interval: 15s
+  default_interval: 30s
   default_timeout: 10s
 
 targets:

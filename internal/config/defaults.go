@@ -16,7 +16,7 @@ func Default() Config {
 			},
 		},
 		Scrape: ScrapeConfig{
-			DefaultInterval: 15 * time.Second,
+			DefaultInterval: 30 * time.Second,
 			DefaultTimeout:  10 * time.Second,
 		},
 		Docker: DockerConfig{
@@ -24,7 +24,7 @@ func Default() Config {
 			SocketPath: "/var/run/docker.sock",
 			Metrics: DockerMetricsConfig{
 				Enabled:  false,
-				Interval: 10 * time.Second,
+				Interval: 30 * time.Second,
 			},
 			Discovery: DockerDiscoveryConfig{
 				Enabled:     false,
@@ -36,7 +36,7 @@ func Default() Config {
 			Enabled:  false,
 			ProcPath: "/proc",
 			SysPath:  "/sys",
-			Interval: 5 * time.Second,
+			Interval: 30 * time.Second,
 		},
 		Dashboards: DashboardsConfig{
 			Dir:           "/etc/owl/dashboards",
