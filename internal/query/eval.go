@@ -2,8 +2,10 @@ package query
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
+	"strconv"
 
 	"github.com/neverbot/owl/internal/storage"
 )
@@ -37,6 +39,8 @@ func (e *evaluator) eval(node Node) ([]storage.Series, error) {
 		return e.evalBinaryOp(n)
 	case *BinaryExprNode:
 		return e.evalBinaryExpr(n)
+	case *HistogramQuantileNode:
+		return e.evalHistogramQuantile(n)
 	default:
 		return nil, fmt.Errorf("eval: unknown node type %T", node)
 	}
@@ -553,6 +557,227 @@ func labelSig(labels map[string]string) string {
 	}
 	keys := make([]string, 0, len(labels))
 	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var b []byte
+	for i, k := range keys {
+		if i > 0 {
+			b = append(b, ',')
+		}
+		b = append(b, k...)
+		b = append(b, '=')
+		b = append(b, labels[k]...)
+	}
+	return string(b)
+}
+
+// evalHistogramQuantile computes histogram_quantile(q, expr).
+//
+// The inner expression must return Prometheus-style cumulative bucket
+// series, each carrying a `le` label. Series are grouped by every
+// other label; within each group, buckets are sorted by their `le`
+// value (with `+Inf` last). For every timestamp present in the group,
+// the requested quantile is computed by linear interpolation between
+// adjacent bucket boundaries, using 0 as the implicit lower edge of
+// the smallest bucket and clamping the `+Inf` upper edge to the
+// highest finite boundary. Groups whose total count is zero at a
+// given timestamp emit no point at that timestamp (no NaN samples,
+// since storage rejects them).
+func (e *evaluator) evalHistogramQuantile(n *HistogramQuantileNode) ([]storage.Series, error) {
+	inner, err := e.eval(n.Expr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Group input series by their label set minus `le`. We also
+	// preserve the first-seen insertion order for deterministic output.
+	type group struct {
+		labels  map[string]string
+		buckets []histogramBucket
+	}
+	groups := make(map[string]*group)
+	var order []string
+	for i := range inner {
+		s := &inner[i]
+		leStr, ok := s.Labels["le"]
+		if !ok {
+			return nil, fmt.Errorf("histogram_quantile: input series missing `le` label")
+		}
+		le, err := parseLE(leStr)
+		if err != nil {
+			return nil, fmt.Errorf("histogram_quantile: invalid `le` label %q: %w", leStr, err)
+		}
+		key := groupKeyWithoutLE(s.Labels)
+		g, exists := groups[key]
+		if !exists {
+			lbls := make(map[string]string, len(s.Labels))
+			for k, v := range s.Labels {
+				if k == "le" {
+					continue
+				}
+				lbls[k] = v
+			}
+			g = &group{labels: lbls}
+			groups[key] = g
+			order = append(order, key)
+		}
+		g.buckets = append(g.buckets, histogramBucket{le: le, series: s})
+	}
+
+	out := make([]storage.Series, 0, len(order))
+	for _, key := range order {
+		g := groups[key]
+		sort.Slice(g.buckets, func(i, j int) bool {
+			return g.buckets[i].le < g.buckets[j].le
+		})
+
+		// Collect the union of timestamps across all buckets in the group.
+		tsSet := make(map[int64]struct{})
+		for _, b := range g.buckets {
+			for _, p := range b.series.Points {
+				tsSet[p.TS] = struct{}{}
+			}
+		}
+		timestamps := make([]int64, 0, len(tsSet))
+		for ts := range tsSet {
+			timestamps = append(timestamps, ts)
+		}
+		sort.Slice(timestamps, func(i, j int) bool { return timestamps[i] < timestamps[j] })
+
+		// Pre-index each bucket's points for O(1) timestamp lookup.
+		perBucketByTS := make([]map[int64]float64, len(g.buckets))
+		for i, b := range g.buckets {
+			m := make(map[int64]float64, len(b.series.Points))
+			for _, p := range b.series.Points {
+				m[p.TS] = p.Value
+			}
+			perBucketByTS[i] = m
+		}
+
+		pts := make([]storage.Point, 0, len(timestamps))
+		for _, ts := range timestamps {
+			v, ok := computeQuantileAtTS(n.Quantile, g.buckets, perBucketByTS, ts)
+			if !ok {
+				continue
+			}
+			pts = append(pts, storage.Point{TS: ts, Value: v})
+		}
+		if len(pts) == 0 {
+			continue
+		}
+		// Metric name is dropped, matching Prometheus convention for
+		// derived series.
+		out = append(out, storage.Series{Metric: "", Labels: g.labels, Points: pts})
+	}
+	return out, nil
+}
+
+// computeQuantileAtTS returns the interpolated quantile for the given
+// timestamp, or (0, false) if the group has no observations at this
+// timestamp (so no point should be emitted).
+//
+// buckets is sorted by le ascending. perBucketByTS[i] holds the
+// already-indexed points for buckets[i]. A bucket missing a value at
+// ts is treated as zero, which is consistent with cumulative-histogram
+// semantics (no observations recorded yet for that bucket).
+// histogramBucket pairs a parsed `le` boundary with the bucket series.
+type histogramBucket struct {
+	le     float64 // math.Inf(+1) for the "+Inf" catch-all bucket
+	series *storage.Series
+}
+
+func computeQuantileAtTS(q float64, buckets []histogramBucket, perBucketByTS []map[int64]float64, ts int64) (float64, bool) {
+	if len(buckets) == 0 {
+		return 0, false
+	}
+	counts := make([]float64, len(buckets))
+	for i := range buckets {
+		counts[i] = perBucketByTS[i][ts]
+	}
+
+	// Total is the count in the last (highest le) bucket, which by
+	// cumulative-histogram convention is `+Inf` if present, otherwise
+	// the highest finite bucket.
+	total := counts[len(counts)-1]
+	if total <= 0 {
+		return 0, false
+	}
+
+	// Quantile=1: by convention return the highest finite bucket
+	// boundary (the +Inf upper edge is unbounded, so we clamp).
+	if q >= 1 {
+		return highestFiniteLE(buckets), true
+	}
+	target := q * total
+
+	// Walk buckets in ascending le order.
+	prevCount := 0.0
+	prevLE := 0.0 // implicit lower edge for the smallest bucket
+	for i, b := range buckets {
+		c := counts[i]
+		if c >= target {
+			// Use 0 as the lower edge for the very first bucket.
+			loLE := prevLE
+			if i == 0 {
+				loLE = 0
+				// Negative bucket boundaries (rare in practice) would
+				// require a different convention; clamp to 0.
+				if b.le < 0 {
+					loLE = b.le
+				}
+			}
+			hiLE := b.le
+			if math.IsInf(hiLE, +1) {
+				// Clamp +Inf to the highest finite bucket boundary.
+				hiLE = highestFiniteLE(buckets)
+				// If no finite bucket exists, fall back to prevLE.
+				if math.IsInf(hiLE, +1) {
+					hiLE = loLE
+				}
+			}
+			span := c - prevCount
+			if span <= 0 {
+				return hiLE, true
+			}
+			return loLE + (target-prevCount)/span*(hiLE-loLE), true
+		}
+		prevCount = c
+		prevLE = b.le
+	}
+	// Should not be reachable because target <= total = counts[last].
+	return highestFiniteLE(buckets), true
+}
+
+// highestFiniteLE returns the largest finite `le` boundary in
+// buckets, or +Inf if every bucket is +Inf (degenerate input).
+// buckets must be sorted by le ascending.
+func highestFiniteLE(buckets []histogramBucket) float64 {
+	for i := len(buckets) - 1; i >= 0; i-- {
+		if !math.IsInf(buckets[i].le, +1) {
+			return buckets[i].le
+		}
+	}
+	return math.Inf(+1)
+}
+
+// parseLE parses a histogram bucket boundary string. Prometheus emits
+// `+Inf` for the catch-all bucket; everything else is a decimal float.
+func parseLE(s string) (float64, error) {
+	if s == "+Inf" || s == "Inf" {
+		return math.Inf(+1), nil
+	}
+	return strconv.ParseFloat(s, 64)
+}
+
+// groupKeyWithoutLE returns a stable key for the label set with `le`
+// excluded. Used to group histogram bucket series.
+func groupKeyWithoutLE(labels map[string]string) string {
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		if k == "le" {
+			continue
+		}
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)

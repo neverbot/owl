@@ -92,6 +92,7 @@ func TestEngineIsSupported(t *testing.T) {
 		"sum by (job) (rate(reqs_total[1m]))",
 		"cpu * 2",
 		"2 + cpu",
+		"histogram_quantile(0.9, rate(reqs_bucket[5m]))",
 	}
 	for _, expr := range supported {
 		ok, reason := eng.IsSupported(expr)
@@ -101,7 +102,7 @@ func TestEngineIsSupported(t *testing.T) {
 	}
 
 	unsupported := []string{
-		"histogram_quantile(0.9, rate(reqs_bucket[5m]))",
+		"histogram_quantile(0.9)", // missing inner expression
 		"",
 	}
 	for _, expr := range unsupported {

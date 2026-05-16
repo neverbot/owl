@@ -104,3 +104,19 @@ type BinaryExprNode struct {
 }
 
 func (*BinaryExprNode) nodeMarker() {}
+
+// HistogramQuantileNode evaluates `histogram_quantile(q, expr)` over
+// the cumulative-bucket vector produced by Expr.
+//
+// Quantile is a literal float in [0, 1] validated at parse time. Expr
+// must yield a set of Prometheus-style histogram bucket series, each
+// carrying a `le` label whose value is the bucket's upper bound (a
+// finite number or `+Inf`). The evaluator groups bucket series by
+// every label except `le`, sorts each group by bucket boundary, and
+// linearly interpolates the requested quantile per timestamp.
+type HistogramQuantileNode struct {
+	Quantile float64
+	Expr     Node
+}
+
+func (*HistogramQuantileNode) nodeMarker() {}

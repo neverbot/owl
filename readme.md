@@ -208,6 +208,22 @@ restarts cleanly).
   Best for "how many X happened in the last hour" tables and
   threshold rules.
 
+```promql
+histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))
+```
+
+- **`histogram_quantile(q, expr)`** — computes the `q` quantile
+  (with `q` a literal in `[0, 1]`) from Prometheus-style cumulative
+  histogram bucket series. `expr` must yield a vector where every
+  series carries a `le` label whose value is the bucket's upper
+  bound (a finite number or `+Inf`). Bucket series are grouped by
+  every label except `le`; within each group, the quantile is
+  found by linear interpolation between adjacent bucket
+  boundaries, using `0` as the implicit lower edge of the smallest
+  bucket and clamping the `+Inf` upper edge to the highest finite
+  boundary. Groups with zero total observations at a given
+  timestamp emit no point at that timestamp.
+
 **Aggregations**
 
 ```promql
@@ -256,8 +272,8 @@ The list below is concrete. Any of these will return a parse error or
 fail to match a series; the dashboard layer marks the affected panel
 as "unsupported" with the engine's reason. PRs welcome.
 
-**Functions**: `irate`, `increase`, `delta`, `idelta`, `deriv`,
-`predict_linear`, `holt_winters`, `histogram_quantile`,
+**Functions**: `delta`, `idelta`, `deriv`,
+`predict_linear`, `holt_winters`,
 `*_over_time` (avg_over_time, max_over_time, …), `abs`/`ceil`/`floor`/`round`/`sqrt`/`ln`/`log2`/`log10`/`exp`,
 `topk`/`bottomk`/`quantile`, `clamp`/`clamp_min`/`clamp_max`,
 `label_replace`/`label_join`, `time`/`vector`/`scalar`,

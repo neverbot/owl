@@ -297,6 +297,12 @@ func (p *parser) parseAtom() (Node, error) {
 		return p.parseRangeFunc(word)
 	}
 
+	// histogram_quantile(q, expr) — different shape: scalar literal,
+	// comma, nested expression.
+	if word == "histogram_quantile" {
+		return p.parseHistogramQuantile()
+	}
+
 	// Consume the identifier.
 	p.consume()
 
@@ -496,4 +502,45 @@ func (p *parser) parseRangeFunc(fn string) (*RangeFuncNode, error) {
 	p.consume() // consume )
 
 	return &RangeFuncNode{Func: fn, Expr: inner, Window: Duration{Value: n, Unit: unit}}, nil
+}
+
+// parseHistogramQuantile parses `histogram_quantile(q, expr)`. The
+// current token is the function-name identifier when called. q must
+// be a numeric literal in [0, 1]; expr is any expression accepted by
+// parseExpr (typically a `rate(metric_bucket[w])` or a `sum by (..., le) (...)`).
+func (p *parser) parseHistogramQuantile() (*HistogramQuantileNode, error) {
+	p.consume() // consume "histogram_quantile"
+	if p.cur.kind != tokLParen {
+		return nil, fmt.Errorf("parse: expected '(' after histogram_quantile, got %q", p.cur.val)
+	}
+	p.consume() // consume (
+
+	if p.cur.kind != tokNumber {
+		return nil, fmt.Errorf("parse: expected numeric quantile literal in histogram_quantile, got %q", p.cur.val)
+	}
+	q, err := strconv.ParseFloat(p.cur.val, 64)
+	if err != nil {
+		return nil, fmt.Errorf("parse: invalid quantile %q: %w", p.cur.val, err)
+	}
+	if q < 0 || q > 1 {
+		return nil, fmt.Errorf("parse: histogram_quantile q must be in [0, 1], got %v", q)
+	}
+	p.consume() // consume number
+
+	if p.cur.kind != tokComma {
+		return nil, fmt.Errorf("parse: expected ',' after quantile in histogram_quantile, got %q", p.cur.val)
+	}
+	p.consume() // consume ,
+
+	inner, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+
+	if p.cur.kind != tokRParen {
+		return nil, fmt.Errorf("parse: expected ')' after histogram_quantile expression, got %q", p.cur.val)
+	}
+	p.consume() // consume )
+
+	return &HistogramQuantileNode{Quantile: q, Expr: inner}, nil
 }

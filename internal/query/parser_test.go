@@ -306,6 +306,38 @@ func TestParseSeriesOnSeries(t *testing.T) {
 	}
 }
 
+func TestParseHistogramQuantile(t *testing.T) {
+	node, err := Parse("histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[1m]))")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hq, ok := node.(*HistogramQuantileNode)
+	if !ok {
+		t.Fatalf("expected *HistogramQuantileNode, got %T", node)
+	}
+	if hq.Quantile != 0.95 {
+		t.Errorf("quantile: want 0.95, got %v", hq.Quantile)
+	}
+	inner, ok := hq.Expr.(*RangeFuncNode)
+	if !ok {
+		t.Fatalf("inner: expected *RangeFuncNode, got %T", hq.Expr)
+	}
+	if inner.Func != "rate" {
+		t.Errorf("inner func: want rate, got %q", inner.Func)
+	}
+}
+
+func TestParseHistogramQuantileOutOfRange(t *testing.T) {
+	for _, expr := range []string{
+		"histogram_quantile(1.5, foo_bucket)",
+		"histogram_quantile(2, foo_bucket)",
+	} {
+		if _, err := Parse(expr); err == nil {
+			t.Errorf("Parse(%q): expected error, got nil", expr)
+		}
+	}
+}
+
 func TestParseRegexMatchers(t *testing.T) {
 	node, err := Parse(`http_requests_total{status=~"5.."}`)
 	if err != nil {

@@ -431,6 +431,116 @@ func TestEvalSeriesOnSeriesSubtraction(t *testing.T) {
 	}
 }
 
+func TestEvalHistogramQuantileBasic(t *testing.T) {
+	// Five buckets with cumulative counts at TS 1000:
+	//   le=0.1 → 1, le=0.5 → 4, le=1   → 7, le=5 → 9, le=+Inf → 10.
+	// Total = 10. q=0.5 → target = 5. Falls into bucket le=1 (prev count 4).
+	// Interp: 0.5 + (5-4)/(7-4) * (1-0.5) = 0.5 + (1/3)*0.5 = 0.6666...
+	q := newFakeQuerier()
+	add := func(le string, v float64) {
+		q.addSeries("h_bucket", map[string]string{"le": le}, []storage.Point{{TS: 1000, Value: v}})
+	}
+	add("0.1", 1)
+	add("0.5", 4)
+	add("1", 7)
+	add("5", 9)
+	add("+Inf", 10)
+
+	node, err := Parse("histogram_quantile(0.5, h_bucket)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := newEvaluator(q, 0, 2000)
+	series, err := ev.eval(node)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(series) != 1 {
+		t.Fatalf("want 1 series, got %d", len(series))
+	}
+	if _, has := series[0].Labels["le"]; has {
+		t.Errorf("expected `le` to be dropped, got %v", series[0].Labels)
+	}
+	got := series[0].Points[0].Value
+	want := 0.5 + (1.0/3.0)*0.5
+	if math.Abs(got-want) > 1e-9 {
+		t.Errorf("histogram_quantile(0.5): want %v, got %v", want, got)
+	}
+}
+
+func TestEvalHistogramQuantileGroups(t *testing.T) {
+	// Two services with identical bucket structure but different counts.
+	// Each group must produce its own output series with `le` dropped.
+	q := newFakeQuerier()
+	addSvc := func(svc, le string, v float64) {
+		q.addSeries("h_bucket", map[string]string{"service": svc, "le": le},
+			[]storage.Point{{TS: 1000, Value: v}})
+	}
+	addSvc("api", "1", 1)
+	addSvc("api", "2", 2)
+	addSvc("api", "+Inf", 2)
+	addSvc("worker", "1", 5)
+	addSvc("worker", "2", 10)
+	addSvc("worker", "+Inf", 10)
+
+	node, err := Parse("histogram_quantile(0.9, h_bucket)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := newEvaluator(q, 0, 2000)
+	series, err := ev.eval(node)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(series) != 2 {
+		t.Fatalf("want 2 groups, got %d", len(series))
+	}
+	for _, s := range series {
+		if _, has := s.Labels["le"]; has {
+			t.Errorf("expected `le` dropped, got %v", s.Labels)
+		}
+		if _, has := s.Labels["service"]; !has {
+			t.Errorf("expected `service` preserved, got %v", s.Labels)
+		}
+	}
+}
+
+func TestEvalHistogramQuantileAllZero(t *testing.T) {
+	// All buckets empty: no observations → no point emitted.
+	q := newFakeQuerier()
+	q.addSeries("h_bucket", map[string]string{"le": "1"}, []storage.Point{{TS: 1000, Value: 0}})
+	q.addSeries("h_bucket", map[string]string{"le": "+Inf"}, []storage.Point{{TS: 1000, Value: 0}})
+
+	node, err := Parse("histogram_quantile(0.5, h_bucket)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := newEvaluator(q, 0, 2000)
+	series, err := ev.eval(node)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(series) != 0 {
+		t.Errorf("want 0 series (no observations), got %d", len(series))
+	}
+}
+
+func TestEvalHistogramQuantileMissingLE(t *testing.T) {
+	q := newFakeQuerier()
+	q.addSeries("h_bucket", map[string]string{"service": "api"},
+		[]storage.Point{{TS: 1000, Value: 1}})
+
+	node, err := Parse("histogram_quantile(0.5, h_bucket)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := newEvaluator(q, 0, 2000)
+	_, err = ev.eval(node)
+	if err == nil {
+		t.Fatal("expected error for missing `le` label, got nil")
+	}
+}
+
 func TestEvalSeriesOnSeriesBroadcast(t *testing.T) {
 	// LHS has two devices, RHS has a single global series; broadcast.
 	q := newFakeQuerier()
