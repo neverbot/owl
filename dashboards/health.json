@@ -83,7 +83,7 @@
       "title": "Alerter evaluations / s",
       "description": "Rate of alert-rule evaluation cycles. A flat line at zero (when rules are configured) means the alerter has stopped looping.",
       "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
-      "fieldConfig": { "defaults": { "unit": "short", "min": 0 } },
+      "fieldConfig": { "defaults": { "unit": "ops", "min": 0 } },
       "targets": [
         { "refId": "A", "expr": "rate(owl_alerts_evaluations_total[5m])", "legendFormat": "evals/s" }
       ]
@@ -94,7 +94,7 @@
       "title": "Webhook activity",
       "description": "Webhook deliveries per second, split between successful sends and failures. A sustained failures line over zero means the webhook receiver is unreachable or rejecting events.",
       "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
-      "fieldConfig": { "defaults": { "unit": "short", "min": 0 } },
+      "fieldConfig": { "defaults": { "unit": "ops", "min": 0 } },
       "targets": [
         { "refId": "A", "expr": "rate(owl_alerts_webhook_sends_total[5m])",    "legendFormat": "sends" },
         { "refId": "B", "expr": "rate(owl_alerts_webhook_failures_total[5m])", "legendFormat": "failures" }
