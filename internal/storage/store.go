@@ -124,6 +124,11 @@ func (s *Store) Query(metric string, from, to int64) ([]Series, error) {
 }
 
 // Stats reports the on-disk size and the sample row count.
+// Stats sums the on-disk footprint across every SQLite-managed file
+// (the main `.db` plus the `-wal` and `-shm` sidecar files when
+// present). Reporting just the main file would undercount by up to
+// the WAL autocheckpoint threshold and let size-based retention quietly
+// exceed its configured cap.
 func (s *Store) Stats() (Stats, error) {
 	var st Stats
 	if err := s.db.QueryRow(`SELECT COUNT(*) FROM samples`).Scan(&st.SampleCount); err != nil {
@@ -134,6 +139,11 @@ func (s *Store) Stats() (Stats, error) {
 		return st, fmt.Errorf("stat: %w", err)
 	}
 	st.SizeBytes = fi.Size()
+	for _, suffix := range []string{"-wal", "-shm"} {
+		if fi, err := os.Stat(s.path + suffix); err == nil {
+			st.SizeBytes += fi.Size()
+		}
+	}
 	return st, nil
 }
 
