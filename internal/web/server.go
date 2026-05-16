@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/neverbot/owl/internal/alert"
 	"github.com/neverbot/owl/internal/dashboards"
 	"github.com/neverbot/owl/internal/query"
 	"github.com/neverbot/owl/internal/scrape"
@@ -28,6 +29,9 @@ type Options struct {
 	// Scrape exposes per-target health for /api/targets and /targets.
 	// nil disables those endpoints.
 	Scrape ScrapeHealth
+	// Alerter exposes counters for the /metrics endpoint. nil omits
+	// the owl_alerts_* gauges from the exposition.
+	Alerter AlerterStats
 	// OnReload is invoked when a client POSTs to /-/reload (or the
 	// process receives SIGHUP; that wiring lives in cmd/owl). The
 	// hook is responsible for re-reading the config file and the
@@ -40,6 +44,12 @@ type Options struct {
 // Defined as an interface so unit tests can plug a fake.
 type ScrapeHealth interface {
 	HealthSnapshot() []scrape.TargetHealth
+}
+
+// AlerterStats is the slice of alert.Manager the /metrics handler
+// needs. Defined as an interface so tests can plug a fake.
+type AlerterStats interface {
+	Snapshot() alert.Stats
 }
 
 // Server is an http.Handler routing all of Owl's HTTP traffic.

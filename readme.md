@@ -319,6 +319,16 @@ down.
 | `GET /metrics` | owl's own metrics in Prometheus text exposition format |
 | `GET /static/*` | Embedded JS / CSS assets |
 
+The `/metrics` payload covers process vitals (`owl_goroutines`,
+`owl_heap_objects_bytes`), storage stats (`owl_storage_samples_total`,
+`owl_storage_size_bytes`), the loaded dashboard count
+(`owl_dashboards_loaded`) and alerter counters
+(`owl_alerts_evaluations_total`, `owl_alerts_webhook_sends_total`,
+`owl_alerts_webhook_failures_total`, `owl_alerts_firing`). Wire owl
+to scrape itself in `targets:` to persist these into the same
+storage and build "alerter is broken" alerts against
+`owl_alerts_webhook_failures_total` or `owl_alerts_evaluations_total`.
+
 Times are millisecond Unix timestamps.
 
 ## Alerting

@@ -62,6 +62,30 @@ func (s *Server) metrics(w http.ResponseWriter, r *http.Request) {
 			"gauge",
 			float64(len(s.opt.Loader.List())))
 	}
+
+	// Alerter snapshot. Counts cycles, webhook deliveries, failures
+	// and the live count of firing lineages. Lets the operator wire
+	// an alert on the alerter itself — "fire if no successful
+	// webhook in 5 minutes".
+	if s.opt.Alerter != nil {
+		st := s.opt.Alerter.Snapshot()
+		emit(w, "owl_alerts_evaluations_total",
+			"Total alert-rule evaluation cycles since process start.",
+			"counter",
+			float64(st.EvaluationsTotal))
+		emit(w, "owl_alerts_webhook_sends_total",
+			"Total webhook delivery attempts since process start.",
+			"counter",
+			float64(st.WebhookSendsTotal))
+		emit(w, "owl_alerts_webhook_failures_total",
+			"Total webhook deliveries that returned an error since process start.",
+			"counter",
+			float64(st.WebhookFailuresTotal))
+		emit(w, "owl_alerts_firing",
+			"Number of (rule, series) lineages currently in the firing state.",
+			"gauge",
+			float64(st.Firing))
+	}
 }
 
 // emit writes one HELP / TYPE / sample triplet to w. Owl's exposition

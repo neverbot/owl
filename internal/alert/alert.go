@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/neverbot/owl/internal/query"
@@ -80,6 +81,43 @@ type Manager struct {
 	w        Webhook
 	interval time.Duration
 	now      func() time.Time
+
+	// Counters published via Stats(). atomic so /metrics can read
+	// them without contending on mu.
+	evalsTotal      atomic.Int64
+	sendsTotal      atomic.Int64
+	failuresTotal   atomic.Int64
+}
+
+// Stats is the operational snapshot the web layer publishes through
+// /metrics. EvaluationsTotal counts cycles since process start;
+// WebhookSendsTotal and WebhookFailuresTotal count delivery attempts
+// and the subset that returned an error. Firing is the live count of
+// alert lineages currently in the "fired" state.
+type Stats struct {
+	EvaluationsTotal     int64
+	WebhookSendsTotal    int64
+	WebhookFailuresTotal int64
+	Firing               int
+}
+
+// Snapshot returns a Stats value captured under the manager's lock so
+// the Firing tally is consistent with the counters.
+func (m *Manager) Snapshot() Stats {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	firing := 0
+	for _, st := range m.state {
+		if st.fired {
+			firing++
+		}
+	}
+	return Stats{
+		EvaluationsTotal:     m.evalsTotal.Load(),
+		WebhookSendsTotal:    m.sendsTotal.Load(),
+		WebhookFailuresTotal: m.failuresTotal.Load(),
+		Firing:               firing,
+	}
 }
 
 // stateKey identifies a per-rule, per-series alert lineage.
@@ -170,6 +208,7 @@ func (m *Manager) SetRules(rules []Rule) {
 
 // EvaluateOnce runs one evaluation cycle across every rule.
 func (m *Manager) EvaluateOnce(ctx context.Context) {
+	m.evalsTotal.Add(1)
 	m.mu.Lock()
 	rules := append([]Rule(nil), m.rules...) // snapshot under lock
 	m.mu.Unlock()
@@ -285,7 +324,9 @@ func (m *Manager) dispatch(ctx context.Context, e Event) {
 			"value", e.Value, "threshold", e.Threshold)
 		return
 	}
+	m.sendsTotal.Add(1)
 	if err := w.Send(ctx, e); err != nil {
+		m.failuresTotal.Add(1)
 		slog.Error("alert webhook failed", "rule", e.Rule, "status", e.Status, "err", err)
 	}
 }

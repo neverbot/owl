@@ -337,3 +337,76 @@ func TestCompareOps(t *testing.T) {
 		}
 	}
 }
+
+func TestSnapshotCountersAndFiring(t *testing.T) {
+	q := &fakeQuerier{value: 0.9, ok: true}
+	w := &capturingWebhook{}
+	rules := []Rule{
+		{Name: "a", Expr: "x", Op: ">", Threshold: 0.5, For: 0},
+		{Name: "b", Expr: "x", Op: ">", Threshold: 0.5, For: 0},
+	}
+	now := time.Now()
+	m := newManager(q, w, rules, func() time.Time { return now })
+
+	// Before any cycle: all zero.
+	if s := m.Snapshot(); s.EvaluationsTotal != 0 || s.WebhookSendsTotal != 0 || s.Firing != 0 {
+		t.Fatalf("initial snapshot non-zero: %+v", s)
+	}
+
+	// One cycle: both rules fire immediately.
+	m.EvaluateOnce(context.Background())
+	s := m.Snapshot()
+	if s.EvaluationsTotal != 1 {
+		t.Errorf("evaluations after 1 cycle = %d, want 1", s.EvaluationsTotal)
+	}
+	if s.WebhookSendsTotal != 2 {
+		t.Errorf("webhook sends = %d, want 2 (one per rule)", s.WebhookSendsTotal)
+	}
+	if s.WebhookFailuresTotal != 0 {
+		t.Errorf("failures = %d, want 0", s.WebhookFailuresTotal)
+	}
+	if s.Firing != 2 {
+		t.Errorf("firing = %d, want 2", s.Firing)
+	}
+
+	// One series clears, the other stays firing.
+	q.value = 0.1
+	now = now.Add(time.Second)
+	m.EvaluateOnce(context.Background())
+	q.value = 0.9
+	now = now.Add(time.Second)
+	m.EvaluateOnce(context.Background())
+
+	s = m.Snapshot()
+	if s.EvaluationsTotal != 3 {
+		t.Errorf("evaluations = %d, want 3", s.EvaluationsTotal)
+	}
+	// Sequence: fire(2) + resolved(2) + re-fire(2) = 6 sends total.
+	if s.WebhookSendsTotal != 6 {
+		t.Errorf("webhook sends = %d, want 6", s.WebhookSendsTotal)
+	}
+}
+
+type erroringWebhook struct{}
+
+func (erroringWebhook) Send(context.Context, Event) error {
+	return errBoom
+}
+
+var errBoom = &dummyErr{"boom"}
+
+type dummyErr struct{ s string }
+
+func (e *dummyErr) Error() string { return e.s }
+
+func TestSnapshotCountsWebhookFailures(t *testing.T) {
+	q := &fakeQuerier{value: 0.9, ok: true}
+	rules := []Rule{{Name: "r", Expr: "x", Op: ">", Threshold: 0.5, For: 0}}
+	m := newManager(q, erroringWebhook{}, rules, time.Now)
+
+	m.EvaluateOnce(context.Background())
+	s := m.Snapshot()
+	if s.WebhookSendsTotal != 1 || s.WebhookFailuresTotal != 1 {
+		t.Errorf("sends=%d failures=%d, want 1/1", s.WebhookSendsTotal, s.WebhookFailuresTotal)
+	}
+}
