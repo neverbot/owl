@@ -23,6 +23,14 @@ var schemaStatements = []string{
 
 	`CREATE INDEX IF NOT EXISTS idx_samples_metric_ts
 		ON samples (metric, ts)`,
+
+	// Secondary index over ts alone so the retention worker can ask
+	// "is there anything older than X?" with a cheap LIMIT 1 probe,
+	// and so DELETE WHERE ts<? does not have to scan every (metric,
+	// ts) bucket. Costs roughly one extra B-tree insert per Append
+	// and ~10 MB of disk per million rows; well worth it given the
+	// worker runs unconditionally on every tick.
+	`CREATE INDEX IF NOT EXISTS idx_samples_ts ON samples (ts)`,
 }
 
 // pragmas are applied once at open time. They configure SQLite for a

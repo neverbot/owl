@@ -117,7 +117,7 @@ func run(cfg config.Config, configPath string) error {
 		Store:    store,
 		Time:     cfg.Storage.Retention.Time,
 		Size:     cfg.Storage.Retention.Size,
-		Interval: 5 * time.Minute,
+		Interval: cfg.Storage.Retention.Interval,
 	}
 	spawn(func() { retention.Run(ctx) })
 

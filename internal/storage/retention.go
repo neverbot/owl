@@ -2,14 +2,30 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 )
 
-// EnforceTime deletes samples older than (now - keep). Returns the number
-// of rows deleted.
+// EnforceTime deletes samples older than (now - keep). Returns the
+// number of rows deleted.
+//
+// A cheap probe (`LIMIT 1` against the secondary ts index) short-
+// circuits the call when nothing is eligible — the common case once
+// the time horizon has been reached, since most ticks see no rows
+// past the cutoff. Without this, the DELETE would scan the (metric,
+// ts) index from the top on every tick even when there is no work to
+// do.
 func EnforceTime(s *Store, keep time.Duration, now int64) (int64, error) {
 	cutoff := now - keep.Milliseconds()
+	var probe int
+	err := s.db.QueryRow(`SELECT 1 FROM samples WHERE ts < ? LIMIT 1`, cutoff).Scan(&probe)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("probe: %w", err)
+	}
 	res, err := s.db.Exec(`DELETE FROM samples WHERE ts < ?`, cutoff)
 	if err != nil {
 		return 0, fmt.Errorf("enforce time: %w", err)
@@ -24,14 +40,27 @@ func EnforceTime(s *Store, keep time.Duration, now int64) (int64, error) {
 	return n, nil
 }
 
-// EnforceSize deletes the oldest samples until the on-disk size is at or
-// below cap. cap <= 0 disables the check. Returns rows deleted.
+// EnforceSize deletes the oldest samples until the on-disk size is at
+// or below cap. cap <= 0 disables the check. Returns rows deleted.
 //
-// The algorithm: while size > cap, delete the oldest 10 % of rows,
-// checkpoint, re-measure. Bounded loop (max 20 passes) to guarantee
-// termination even in pathological cases.
+// Hot path: a single Size() call (three os.Stat() syscalls, no DB
+// query) checks whether the cap has been crossed. If not — the
+// overwhelmingly common case — the function returns immediately.
+// Only when the cap is exceeded does the loop fall back to Stats()
+// for the row count needed to compute the 10 % batch.
+//
+// Algorithm once over cap: while size > cap, delete the oldest 10 %
+// of rows, checkpoint, re-measure. Bounded loop (max 20 passes) to
+// guarantee termination even in pathological cases.
 func EnforceSize(s *Store, cap int64) (int64, error) {
 	if cap <= 0 {
+		return 0, nil
+	}
+	size, err := s.Size()
+	if err != nil {
+		return 0, err
+	}
+	if size <= cap {
 		return 0, nil
 	}
 	var total int64

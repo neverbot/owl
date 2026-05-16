@@ -23,10 +23,15 @@ type StorageConfig struct {
 }
 
 // RetentionPolicy is the dual time+size policy. Both apply; whichever
-// triggers first wins.
+// triggers first wins. Interval controls how often the retention
+// worker runs — both checks fire together on each tick. Lower values
+// react sooner to size-cap violations; higher values reduce periodic
+// CPU and disk noise. 30 minutes is a good default for a tiny
+// self-hosted host; bring it down to 5 min on a high-write workload.
 type RetentionPolicy struct {
-	Time time.Duration `yaml:"time"`
-	Size int64         `yaml:"size"` // bytes; 0 disables the size cap
+	Time     time.Duration `yaml:"time"`
+	Size     int64         `yaml:"size"`     // bytes; 0 disables the size cap
+	Interval time.Duration `yaml:"interval"` // 0 falls back to the default
 }
 
 // ScrapeConfig holds defaults applied to every scrape target unless the

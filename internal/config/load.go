@@ -50,6 +50,9 @@ func Validate(c *Config) error {
 	if c.Storage.Retention.Size < 0 {
 		return errors.New("storage.retention.size must be >= 0")
 	}
+	if c.Storage.Retention.Interval <= 0 {
+		return errors.New("storage.retention.interval must be positive")
+	}
 	if c.Scrape.DefaultInterval <= 0 {
 		return errors.New("scrape.default_interval must be positive")
 	}
@@ -92,8 +95,9 @@ func Validate(c *Config) error {
 func (r *RetentionPolicy) UnmarshalYAML(node *yaml.Node) error {
 	// Accept either the mapping form or a structural decoding.
 	type raw struct {
-		Time string `yaml:"time"`
-		Size string `yaml:"size"`
+		Time     string `yaml:"time"`
+		Size     string `yaml:"size"`
+		Interval string `yaml:"interval"`
 	}
 	var x raw
 	if err := node.Decode(&x); err != nil {
@@ -112,6 +116,13 @@ func (r *RetentionPolicy) UnmarshalYAML(node *yaml.Node) error {
 			return fmt.Errorf("retention.size: %w", err)
 		}
 		r.Size = n
+	}
+	if x.Interval != "" {
+		d, err := parseDuration(x.Interval)
+		if err != nil {
+			return fmt.Errorf("retention.interval: %w", err)
+		}
+		r.Interval = d
 	}
 	return nil
 }

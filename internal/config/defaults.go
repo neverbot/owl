@@ -11,8 +11,9 @@ func Default() Config {
 		Storage: StorageConfig{
 			Path: "/var/lib/owl/owl.db",
 			Retention: RetentionPolicy{
-				Time: 30 * 24 * time.Hour, // 30 days
-				Size: 0,                   // disabled unless user opts in
+				Time:     30 * 24 * time.Hour, // 30 days
+				Size:     0,                   // disabled unless user opts in
+				Interval: 30 * time.Minute,
 			},
 		},
 		Scrape: ScrapeConfig{

@@ -103,6 +103,7 @@ storage:
   retention:
     time: 30d
     size: 500MB
+    interval: 30m       # how often the retention worker runs
 
 scrape:
   default_interval: 30s
