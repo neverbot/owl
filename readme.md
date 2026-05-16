@@ -114,7 +114,9 @@ targets:
     # them to keep the SQLite footprint reasonable when a target
     # exposes very verbose histograms or counters you do not need.
     # keep:
-    #   - "^traefik_(service|router)_(requests_total|open_connections)$"
+    #   - "^traefik_(service|router|entrypoint)_requests_total$"
+    #   - "^traefik_(service|router|entrypoint)_request_duration_seconds_(count|sum)$"
+    #   - "^traefik_open_connections$"
     # drop:
     #   - "_bucket$"
 
