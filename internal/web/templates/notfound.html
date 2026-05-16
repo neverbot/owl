@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>404 · owl</title>
+  <script>(function(){try{var t=localStorage.getItem('owl-theme');if(t!=='light'&&t!=='dark'){t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
+  <link rel="stylesheet" href="/static/owl.css">
+</head>
+<body>
+  <div class="shell shell--narrow">
+    <nav class="topbar">
+      <a class="topbar__brand" href="/">owl</a>
+      <div class="topbar__crumbs">
+        <a href="/">dashboards</a>
+        <span class="sep">·</span>
+        <span class="current">404</span>
+      </div>
+      <button class="theme-toggle" data-theme-toggle aria-label="Toggle colour theme" type="button">
+        <svg class="icon-sun" viewBox="0 0 16 16" aria-hidden="true">
+          <circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.25"></circle>
+          <g stroke="currentColor" stroke-width="1.25" stroke-linecap="round">
+            <line x1="8" y1="1.5" x2="8" y2="3"></line>
+            <line x1="8" y1="13" x2="8" y2="14.5"></line>
+            <line x1="1.5" y1="8" x2="3" y2="8"></line>
+            <line x1="13" y1="8" x2="14.5" y2="8"></line>
+            <line x1="3.3" y1="3.3" x2="4.4" y2="4.4"></line>
+            <line x1="11.6" y1="11.6" x2="12.7" y2="12.7"></line>
+            <line x1="3.3" y1="12.7" x2="4.4" y2="11.6"></line>
+            <line x1="11.6" y1="4.4" x2="12.7" y2="3.3"></line>
+          </g>
+        </svg>
+        <svg class="icon-moon" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M12.5 9.5a5.5 5.5 0 0 1-6-7.9c-2.7.7-4.7 3.1-4.7 6 0 3.4 2.8 6.2 6.2 6.2 2.9 0 5.3-2 6-4.7-.5.2-1 .4-1.5.4z" fill="currentColor"></path>
+        </svg>
+      </button>
+    </nav>
+
+    <h1 class="page-title">404 <span class="sep">·</span> not found</h1>
+    <p class="notfound__line">
+      <span class="notfound__verb">GET</span> <code class="notfound__path">{{.Path}}</code>
+    </p>
+    <p class="notfound__hint">no route matches.</p>
+
+    {{if .Items}}
+    <p class="notfound__label">Dashboards available</p>
+    <ul class="dashboard-list">
+      {{range .Items}}
+      <li class="dashboard-list__item">
+        <a class="dashboard-list__link" href="/d/{{.ID}}">{{.Title}}</a>
+        <span class="dashboard-list__meta">{{.PanelCount}} panel{{if ne .PanelCount 1}}s{{end}}</span>
+      </li>
+      {{end}}
+    </ul>
+    {{end}}
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

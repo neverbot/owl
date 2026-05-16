@@ -237,6 +237,48 @@ body {
   color: var(--fg);
 }
 
+/* The dot separator used inside the page title (404 · not found)
+   echoes the topbar crumb separator so the vocabulary stays
+   consistent across pages. */
+.page-title .sep { color: var(--subtle); margin: 0 0.25em; }
+
+/* 404 page — reads like one line of access log followed by a
+   short status. The path is the figure; everything else mutes
+   into context. */
+.notfound__line {
+  margin: 0 0 var(--s-2);
+  font-size: var(--fs-md);
+  line-height: 1.6;
+}
+.notfound__verb {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  margin-right: 0.5em;
+}
+.notfound__path {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  color: var(--fg);
+  background: var(--bg-elevated);
+  border: 1px solid var(--rule);
+  padding: 0.1em 0.5em;
+  border-radius: var(--r-sm);
+  word-break: break-all;
+}
+.notfound__hint {
+  margin: 0 0 var(--s-7);
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+.notfound__label {
+  margin: 0 0 var(--s-3);
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+}
+
 /* Dashboard list (homepage) */
 .dashboard-list {
   list-style: none;

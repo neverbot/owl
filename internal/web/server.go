@@ -95,14 +95,14 @@ func (s *Server) indexOrStatic(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(r.URL.Path, "/static/"):
 		s.serveStatic(w, r, "static/"+r.URL.Path[len("/static/"):])
 	default:
-		http.NotFound(w, r)
+		s.serveNotFound(w, r)
 	}
 }
 
 func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request, name string) {
 	data, err := fs.ReadFile(staticFS, name)
 	if err != nil {
-		http.NotFound(w, r)
+		s.serveNotFound(w, r)
 		return
 	}
 	switch {

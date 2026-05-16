@@ -40,18 +40,18 @@ func (s *Server) dashboardView(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/d/")
 	id = strings.Trim(id, "/")
 	if id == "" {
-		http.NotFound(w, r)
+		s.serveNotFound(w, r)
 		return
 	}
 
 	if s.opt.Loader == nil {
-		http.NotFound(w, r)
+		s.serveNotFound(w, r)
 		return
 	}
 
 	d, ok := s.opt.Loader.Get(id)
 	if !ok {
-		http.NotFound(w, r)
+		s.serveNotFound(w, r)
 		return
 	}
 
