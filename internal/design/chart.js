@@ -512,8 +512,9 @@
 
   function refreshPanel(panel) {
     if (panel.dataset.status === "unsupported") return;
+    var staticSrc = panel.dataset.static;
     var expr = panel.dataset.expr;
-    if (!expr) return;
+    if (!staticSrc && !expr) return;
 
     var unit = panel.dataset.unit || "";
     var refresh = parseInt(panel.dataset.refresh, 10) || DEFAULT_REFRESH_MS;
@@ -521,8 +522,16 @@
     var to = Date.now();
     var from = to - currentWindowMs();
 
-    fetch("/api/query?expr=" + encodeURIComponent(expr) +
-          "&from=" + from + "&to=" + to + "&step=" + step)
+    // The docs site ships pre-baked fixture JSON next to each page.
+    // Panels in those pages set data-static to the fixture URL and we
+    // skip the /api/query call entirely — the response shape is the
+    // same {series: [...]} envelope so the renderer is unchanged.
+    var url = staticSrc
+      ? staticSrc
+      : "/api/query?expr=" + encodeURIComponent(expr) +
+        "&from=" + from + "&to=" + to + "&step=" + step;
+
+    fetch(url)
       .then(function (resp) { return resp.ok ? resp.json() : null; })
       .then(function (body) {
         if (!body) return;
@@ -581,14 +590,16 @@
       var svg = panel.querySelector(".panel__chart");
       if (svg) bindChartInteractions(svg);
 
-      var interval = Math.max(
-        parseInt(panel.dataset.refresh, 10) || DEFAULT_REFRESH_MS,
-        MIN_REFRESH_MS
-      );
+      // data-refresh="0" means "load once, never re-poll" — used by
+      // the docs site so fixture-backed panels render exactly once.
+      var raw = panel.dataset.refresh;
+      var parsed = parseInt(raw, 10);
       function tick() {
         if (document.visibilityState !== "hidden") refreshPanel(panel);
       }
       tick();
+      if (raw !== undefined && parsed === 0) return;
+      var interval = Math.max(parsed || DEFAULT_REFRESH_MS, MIN_REFRESH_MS);
       setInterval(tick, interval);
     });
   }
