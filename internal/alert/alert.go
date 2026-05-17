@@ -84,9 +84,9 @@ type Manager struct {
 
 	// Counters published via Stats(). atomic so /metrics can read
 	// them without contending on mu.
-	evalsTotal      atomic.Int64
-	sendsTotal      atomic.Int64
-	failuresTotal   atomic.Int64
+	evalsTotal    atomic.Int64
+	sendsTotal    atomic.Int64
+	failuresTotal atomic.Int64
 }
 
 // Stats is the operational snapshot the web layer publishes through
