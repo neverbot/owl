@@ -5,7 +5,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X $(PKG)/internal/version.Version=$(VERSION)
 BIN := owl
 
-.PHONY: all build test vet fmt tidy clean docs
+.PHONY: all build test vet fmt tidy clean docs docs-serve docs-check
 
 all: build
 
@@ -29,3 +29,10 @@ clean:
 
 docs:
 	$(GO) run ./cmd/owl-docs --in docs/site/content --out docs/site/dist
+
+docs-serve: docs
+	@echo "Serving docs at http://localhost:8000/"
+	@python3 -m http.server -d docs/site/dist 8000
+
+docs-check:
+	$(GO) run ./cmd/owl-docs --check --in docs/site/content
