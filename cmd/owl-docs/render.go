@@ -131,7 +131,11 @@ func writePage(outDir string, p *Page, html string) error {
 
 // renderAll loads, expands, renders, and writes every page.
 // Partial expansion is added in Task 8; layout wrapping in Task 7.
+// At the end it materialises every fixture referenced by a {{> chart}}
+// partial into outDir/data/<name>.json so the static panels can fetch
+// them via data-static.
 func renderAll(inDir, outDir string) error {
+	resetReferencedFixtures()
 	pages, err := loadPages(inDir)
 	if err != nil {
 		return err
@@ -161,6 +165,30 @@ func renderAll(inDir, outDir string) error {
 			return fmt.Errorf("%s: render layout: %w", p.SourcePath, err)
 		}
 		if err := writePage(outDir, p, out.String()); err != nil {
+			return err
+		}
+	}
+	if err := writeFixtures(outDir); err != nil {
+		return fmt.Errorf("write fixtures: %w", err)
+	}
+	return nil
+}
+
+// writeFixtures materialises every fixture referenced during the last
+// renderAll into outDir/data/<name>.json. Fixtures not referenced by
+// any page are skipped so the output stays minimal.
+func writeFixtures(outDir string) error {
+	dir := filepath.Join(outDir, "data")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	for _, name := range referencedFixtureList() {
+		f, _ := LookupFixture(name)
+		b, err := MarshalFixture(f)
+		if err != nil {
+			return fmt.Errorf("marshal %q: %w", name, err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name+".json"), b, 0o644); err != nil {
 			return err
 		}
 	}
