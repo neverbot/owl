@@ -5,7 +5,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X $(PKG)/internal/version.Version=$(VERSION)
 BIN := owl
 
-.PHONY: all build test vet fmt tidy clean
+.PHONY: all build test vet fmt tidy clean docs
 
 all: build
 
@@ -26,3 +26,6 @@ tidy:
 
 clean:
 	rm -f $(BIN) coverage.txt
+
+docs:
+	$(GO) run ./cmd/owl-docs --in docs/site/content --out docs/site/dist

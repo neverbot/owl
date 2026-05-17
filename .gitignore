@@ -1,6 +1,7 @@
 # Binaries
 /owl
 /dist/
+/docs/site/dist/
 
 # Test artefacts
 *.test
