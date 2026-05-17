@@ -43,17 +43,24 @@ func (d Duration) Milliseconds() int64 {
 
 // RangeFuncNode represents a function applied to a range-vector
 // selector with a window: `func(expr[Nd])`. Func is one of "rate",
-// "irate", or "increase".
+// "irate", "increase", "delta", or any of the "*_over_time"
+// aggregators ("avg_over_time", "sum_over_time", "min_over_time",
+// "max_over_time", "count_over_time").
 //
 //   - rate: per-second average across every sample pair in the window.
 //   - irate: per-second rate using only the last two samples in the
 //     window — better for spiky counters than rate's smoothing.
 //   - increase: total counter delta across the window
 //     (mathematically equivalent to rate * window-seconds).
+//   - delta: last - first across the window without counter-reset
+//     handling; meant for gauges, where a decrease is real.
+//   - *_over_time: collapse every sample in the window to a single
+//     statistic per series (avg/sum/min/max/count) without altering
+//     the per-step output cadence.
 //
-// All three share the same parser, the same per-series sliding
-// window, and the same counter-reset handling; they differ only in
-// the value emitted at each step.
+// They all share the same parser and the same per-series sliding
+// window; they differ only in the value emitted at each step and (for
+// the *_over_time family) in whether a single-sample window is enough.
 type RangeFuncNode struct {
 	Func   string
 	Expr   Node
@@ -120,3 +127,20 @@ type HistogramQuantileNode struct {
 }
 
 func (*HistogramQuantileNode) nodeMarker() {}
+
+// TopKNode evaluates `topk(k, expr)` or `bottomk(k, expr)`: at every
+// evaluation timestamp it keeps only the K series with the largest
+// (topk) or smallest (bottomk) value for that timestamp. Unlike
+// sum/avg/..., labels are preserved — the output is a strict subset
+// of the input series, with per-step "did this series win?" gating.
+//
+// K is a positive integer literal validated at parse time. Op is
+// "topk" or "bottomk". Ties are broken by the canonical sorted
+// "k=v,k=v" label signature so output is deterministic.
+type TopKNode struct {
+	Op   string // "topk" or "bottomk"
+	K    int
+	Expr Node
+}
+
+func (*TopKNode) nodeMarker() {}

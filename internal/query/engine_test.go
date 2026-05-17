@@ -81,6 +81,25 @@ func TestEngineCapabilities(t *testing.T) {
 	}
 }
 
+func TestEngineCapabilitiesListsNewFunctions(t *testing.T) {
+	eng := query.NewEngine(nil)
+	caps := eng.Capabilities()
+	have := make(map[string]bool, len(caps.Functions))
+	for _, f := range caps.Functions {
+		have[f] = true
+	}
+	for _, want := range []string{
+		"delta",
+		"avg_over_time", "sum_over_time", "min_over_time",
+		"max_over_time", "count_over_time",
+		"topk", "bottomk",
+	} {
+		if !have[want] {
+			t.Errorf("Capabilities.Functions missing %q (got %v)", want, caps.Functions)
+		}
+	}
+}
+
 func TestEngineIsSupported(t *testing.T) {
 	eng := query.NewEngine(nil)
 
@@ -93,6 +112,14 @@ func TestEngineIsSupported(t *testing.T) {
 		"cpu * 2",
 		"2 + cpu",
 		"histogram_quantile(0.9, rate(reqs_bucket[5m]))",
+		"delta(temperature[5m])",
+		"avg_over_time(cpu[5m])",
+		"sum_over_time(cpu[5m])",
+		"min_over_time(cpu[5m])",
+		"max_over_time(cpu[5m])",
+		"count_over_time(cpu[5m])",
+		"topk(3, cpu)",
+		"bottomk(2, rate(reqs_total[1m]))",
 	}
 	for _, expr := range supported {
 		ok, reason := eng.IsSupported(expr)
@@ -103,6 +130,9 @@ func TestEngineIsSupported(t *testing.T) {
 
 	unsupported := []string{
 		"histogram_quantile(0.9)", // missing inner expression
+		"topk(cpu)",               // missing k
+		"topk(0, cpu)",            // k must be > 0
+		"topk(1.5, cpu)",          // non-integer k
 		"",
 	}
 	for _, expr := range unsupported {

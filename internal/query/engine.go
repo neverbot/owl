@@ -60,7 +60,13 @@ func (e *Engine) QueryRange(expr string, from, to, step int64) (Result, error) {
 // Capabilities returns a static description of what the engine supports.
 func (e *Engine) Capabilities() Capabilities {
 	return Capabilities{
-		Functions: []string{"rate", "irate", "increase", "histogram_quantile"},
+		Functions: []string{
+			"rate", "irate", "increase", "delta",
+			"avg_over_time", "sum_over_time", "min_over_time",
+			"max_over_time", "count_over_time",
+			"histogram_quantile",
+			"topk", "bottomk",
+		},
 		Aggrs: []string{
 			"sum", "avg", "min", "max", "count",
 			"sum_by", "avg_by", "min_by", "max_by", "count_by",

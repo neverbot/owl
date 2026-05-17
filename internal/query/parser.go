@@ -303,6 +303,12 @@ func (p *parser) parseAtom() (Node, error) {
 		return p.parseHistogramQuantile()
 	}
 
+	// topk(k, expr) / bottomk(k, expr) — same two-arg shape as
+	// histogram_quantile but K must be a positive integer literal.
+	if word == "topk" || word == "bottomk" {
+		return p.parseTopK(word)
+	}
+
 	// Consume the identifier.
 	p.consume()
 
@@ -444,9 +450,15 @@ func (p *parser) parseLabelList(keyword string) ([]string, error) {
 // Every entry has the same shape `fn(selector[Nd])`, so they share a
 // single parser routine; the evaluator dispatches on the name.
 var rangeFuncs = map[string]bool{
-	"rate":     true,
-	"irate":    true,
-	"increase": true,
+	"rate":            true,
+	"irate":           true,
+	"increase":        true,
+	"delta":           true,
+	"avg_over_time":   true,
+	"sum_over_time":   true,
+	"min_over_time":   true,
+	"max_over_time":   true,
+	"count_over_time": true,
 }
 
 // parseRangeFunc parses `<fn>(metric[Nd])` for any fn in rangeFuncs.
@@ -543,4 +555,49 @@ func (p *parser) parseHistogramQuantile() (*HistogramQuantileNode, error) {
 	p.consume() // consume )
 
 	return &HistogramQuantileNode{Quantile: q, Expr: inner}, nil
+}
+
+// parseTopK parses `topk(k, expr)` / `bottomk(k, expr)`. The current
+// token is the function-name identifier when called. K must be a
+// positive integer literal; fractional or non-positive values are
+// rejected at parse time.
+func (p *parser) parseTopK(fn string) (*TopKNode, error) {
+	p.consume() // consume "topk" / "bottomk"
+	if p.cur.kind != tokLParen {
+		return nil, fmt.Errorf("parse: expected '(' after %s, got %q", fn, p.cur.val)
+	}
+	p.consume() // consume (
+
+	if p.cur.kind != tokNumber {
+		return nil, fmt.Errorf("parse: expected integer K in %s, got %q", fn, p.cur.val)
+	}
+	// Reject fractional literals (anything containing a dot).
+	if strings.Contains(p.cur.val, ".") {
+		return nil, fmt.Errorf("parse: %s K must be a positive integer, got %q", fn, p.cur.val)
+	}
+	k, err := strconv.ParseInt(p.cur.val, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("parse: invalid %s K %q: %w", fn, p.cur.val, err)
+	}
+	if k <= 0 {
+		return nil, fmt.Errorf("parse: %s K must be > 0, got %d", fn, k)
+	}
+	p.consume() // consume number
+
+	if p.cur.kind != tokComma {
+		return nil, fmt.Errorf("parse: expected ',' after K in %s, got %q", fn, p.cur.val)
+	}
+	p.consume() // consume ,
+
+	inner, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+
+	if p.cur.kind != tokRParen {
+		return nil, fmt.Errorf("parse: expected ')' after %s expression, got %q", fn, p.cur.val)
+	}
+	p.consume() // consume )
+
+	return &TopKNode{Op: fn, K: int(k), Expr: inner}, nil
 }

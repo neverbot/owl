@@ -41,6 +41,8 @@ func (e *evaluator) eval(node Node) ([]storage.Series, error) {
 		return e.evalBinaryExpr(n)
 	case *HistogramQuantileNode:
 		return e.evalHistogramQuantile(n)
+	case *TopKNode:
+		return e.evalTopK(n)
 	default:
 		return nil, fmt.Errorf("eval: unknown node type %T", node)
 	}
@@ -151,17 +153,18 @@ func (e *evaluator) evalRangeFunc(n *RangeFuncNode) ([]storage.Series, error) {
 	}
 
 	compute := pickRangeCompute(n.Func, windowMs)
+	minSamples := minSamplesFor(n.Func)
 
 	out := make([]storage.Series, 0, len(inner))
 	for _, s := range inner {
 		pts := s.Points
-		if len(pts) < 2 {
+		if len(pts) < minSamples {
 			continue
 		}
 		emitted := make([]storage.Point, 0, len(timestamps))
 		for _, t := range timestamps {
 			window := samplesInWindow(pts, t-windowMs, t)
-			if len(window) < 2 {
+			if len(window) < minSamples {
 				continue
 			}
 			emitted = append(emitted, storage.Point{TS: t, Value: compute(window)})
@@ -191,9 +194,103 @@ func pickRangeCompute(fn string, windowMs int64) func([]storage.Point) float64 {
 		return func(pts []storage.Point) float64 {
 			return computeRate(pts) * windowSeconds
 		}
+	case "delta":
+		return computeDelta
+	case "avg_over_time":
+		return computeAvgOverTime
+	case "sum_over_time":
+		return computeSumOverTime
+	case "min_over_time":
+		return computeMinOverTime
+	case "max_over_time":
+		return computeMaxOverTime
+	case "count_over_time":
+		return computeCountOverTime
 	default: // "rate"
 		return computeRate
 	}
+}
+
+// minSamplesFor returns the smallest window-sample count for which fn
+// can produce a meaningful value. Rate-style functions need at least
+// two samples to form a delta; *_over_time aggregators (including
+// count_over_time) need just one.
+func minSamplesFor(fn string) int {
+	switch fn {
+	case "avg_over_time", "sum_over_time", "min_over_time",
+		"max_over_time", "count_over_time":
+		return 1
+	default:
+		return 2
+	}
+}
+
+// computeDelta returns the raw difference between the last and the
+// first sample in the window. Unlike increase, it does not assume the
+// underlying series is a monotonic counter, so a decrease yields a
+// negative value rather than being treated as a reset. Use it for
+// gauges.
+func computeDelta(pts []storage.Point) float64 {
+	if len(pts) < 2 {
+		return 0
+	}
+	return pts[len(pts)-1].Value - pts[0].Value
+}
+
+// computeAvgOverTime returns the arithmetic mean of every sample in
+// the window.
+func computeAvgOverTime(pts []storage.Point) float64 {
+	if len(pts) == 0 {
+		return 0
+	}
+	var s float64
+	for _, p := range pts {
+		s += p.Value
+	}
+	return s / float64(len(pts))
+}
+
+// computeSumOverTime returns the sum of every sample in the window.
+func computeSumOverTime(pts []storage.Point) float64 {
+	var s float64
+	for _, p := range pts {
+		s += p.Value
+	}
+	return s
+}
+
+// computeMinOverTime returns the smallest value seen in the window.
+func computeMinOverTime(pts []storage.Point) float64 {
+	if len(pts) == 0 {
+		return 0
+	}
+	m := pts[0].Value
+	for _, p := range pts[1:] {
+		if p.Value < m {
+			m = p.Value
+		}
+	}
+	return m
+}
+
+// computeMaxOverTime returns the largest value seen in the window.
+func computeMaxOverTime(pts []storage.Point) float64 {
+	if len(pts) == 0 {
+		return 0
+	}
+	m := pts[0].Value
+	for _, p := range pts[1:] {
+		if p.Value > m {
+			m = p.Value
+		}
+	}
+	return m
+}
+
+// computeCountOverTime returns the number of samples present in the
+// window.
+func computeCountOverTime(pts []storage.Point) float64 {
+	return float64(len(pts))
 }
 
 // computeIRate returns the per-second rate computed from just the
@@ -791,6 +888,111 @@ func groupKeyWithoutLE(labels map[string]string) string {
 		b = append(b, labels[k]...)
 	}
 	return string(b)
+}
+
+// evalTopK evaluates `topk(k, expr)` / `bottomk(k, expr)`.
+//
+// At every timestamp present in any input series, it ranks the input
+// series by their value at that timestamp and keeps only the K with
+// the largest (topk) or smallest (bottomk) values. Labels are
+// preserved — the output is a subset of the input series, gated per
+// timestamp ("did this series win at this step?"). Ties break on the
+// canonical sorted label signature so output is deterministic.
+//
+// Series that never win at any timestamp are omitted entirely. Output
+// series preserve the metric name of their input — unlike aggregation,
+// topk does not derive a new series identity.
+func (e *evaluator) evalTopK(n *TopKNode) ([]storage.Series, error) {
+	inner, err := e.eval(n.Expr)
+	if err != nil {
+		return nil, err
+	}
+	if len(inner) == 0 || n.K <= 0 {
+		return nil, nil
+	}
+
+	// Index each series's value by timestamp for O(1) lookup, and
+	// collect the union of timestamps across all input series.
+	type seriesIdx struct {
+		i    int    // index into inner
+		sig  string // canonical label signature for deterministic tie-break
+		byTS map[int64]float64
+	}
+	idx := make([]seriesIdx, len(inner))
+	tsSet := make(map[int64]struct{})
+	for i := range inner {
+		s := &inner[i]
+		m := make(map[int64]float64, len(s.Points))
+		for _, p := range s.Points {
+			m[p.TS] = p.Value
+			tsSet[p.TS] = struct{}{}
+		}
+		idx[i] = seriesIdx{i: i, sig: labelSig(s.Labels), byTS: m}
+	}
+	timestamps := make([]int64, 0, len(tsSet))
+	for ts := range tsSet {
+		timestamps = append(timestamps, ts)
+	}
+	sort.Slice(timestamps, func(i, j int) bool { return timestamps[i] < timestamps[j] })
+
+	// Per-series accumulator of winning points. We preserve the
+	// first-seen order from `inner` so the output is deterministic and
+	// matches the input ordering for downstream consumers.
+	winners := make([][]storage.Point, len(inner))
+
+	type ranked struct {
+		i   int
+		v   float64
+		sig string
+	}
+	for _, ts := range timestamps {
+		candidates := make([]ranked, 0, len(idx))
+		for _, si := range idx {
+			v, ok := si.byTS[ts]
+			if !ok {
+				continue
+			}
+			candidates = append(candidates, ranked{i: si.i, v: v, sig: si.sig})
+		}
+		if len(candidates) == 0 {
+			continue
+		}
+		// Sort: primary by value (desc for topk, asc for bottomk),
+		// secondary by label signature ascending (deterministic
+		// tie-break independent of input order).
+		desc := n.Op == "topk"
+		sort.Slice(candidates, func(a, b int) bool {
+			if candidates[a].v != candidates[b].v {
+				if desc {
+					return candidates[a].v > candidates[b].v
+				}
+				return candidates[a].v < candidates[b].v
+			}
+			return candidates[a].sig < candidates[b].sig
+		})
+		take := n.K
+		if take > len(candidates) {
+			take = len(candidates)
+		}
+		for _, c := range candidates[:take] {
+			winners[c.i] = append(winners[c.i], storage.Point{TS: ts, Value: c.v})
+		}
+	}
+
+	out := make([]storage.Series, 0, len(inner))
+	for i, pts := range winners {
+		if len(pts) == 0 {
+			continue
+		}
+		// Points were appended in ascending-timestamp order already.
+		s := inner[i]
+		out = append(out, storage.Series{
+			Metric: s.Metric,
+			Labels: s.Labels,
+			Points: pts,
+		})
+	}
+	return out, nil
 }
 
 func applyBinOp(op string, seriesVal, scalar float64, scalarLeft bool) float64 {
