@@ -144,12 +144,14 @@ func renderAll(inDir, outDir string) error {
 		return errors.New("no .md files found under " + inDir)
 	}
 	nav := buildNav(pages)
+	expanded := map[string]string{}
 	for _, p := range pages {
-		expanded, err := expandPartials(p.Body)
+		e, err := expandPartials(p.Body)
 		if err != nil {
 			return fmt.Errorf("%s: %w", p.SourcePath, err)
 		}
-		body, err := renderBody(expanded)
+		expanded[p.SourcePath] = e
+		body, err := renderBody(e)
 		if err != nil {
 			return fmt.Errorf("%s: %w", p.SourcePath, err)
 		}
@@ -170,6 +172,9 @@ func renderAll(inDir, outDir string) error {
 	}
 	if err := writeFixtures(outDir); err != nil {
 		return fmt.Errorf("write fixtures: %w", err)
+	}
+	if err := writeSearchIndex(outDir, buildSearchIndex(pages, expanded)); err != nil {
+		return fmt.Errorf("write search index: %w", err)
 	}
 	return nil
 }
