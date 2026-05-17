@@ -141,7 +141,11 @@ func renderAll(inDir, outDir string) error {
 	}
 	nav := buildNav(pages)
 	for _, p := range pages {
-		body, err := renderBody(p.Body)
+		expanded, err := expandPartials(p.Body)
+		if err != nil {
+			return fmt.Errorf("%s: %w", p.SourcePath, err)
+		}
+		body, err := renderBody(expanded)
 		if err != nil {
 			return fmt.Errorf("%s: %w", p.SourcePath, err)
 		}
