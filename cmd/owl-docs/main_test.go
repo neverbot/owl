@@ -47,9 +47,17 @@ func TestRunWritesSearchJS(t *testing.T) {
 	}
 }
 
-func TestRunCheckIsNoop(t *testing.T) {
+func TestRunCheckRunsValidators(t *testing.T) {
+	// With no metrics.md present the metric-coverage validator must
+	// flag the absence, proving --check now invokes runChecks rather
+	// than the previous no-op.
 	in := t.TempDir()
-	if err := run(in, "", true); err != nil {
-		t.Fatalf("--check returned error: %v", err)
+	if err := os.WriteFile(filepath.Join(in, "index.md"),
+		[]byte("---\ntitle: Home\n---\nhi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := run(in, "", true)
+	if err == nil {
+		t.Fatal("expected validation failure (missing metrics.md)")
 	}
 }

@@ -144,6 +144,32 @@ targets:
 	}
 }
 
+func TestLoadBytesValid(t *testing.T) {
+	c, err := LoadBytes([]byte(sampleYAML))
+	if err != nil {
+		t.Fatalf("LoadBytes: %v", err)
+	}
+	if c.Listen != "0.0.0.0:9090" {
+		t.Errorf("listen: %q", c.Listen)
+	}
+}
+
+func TestLoadBytesInvalid(t *testing.T) {
+	if _, err := LoadBytes([]byte(": not yaml :")); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestLoadBytesEmpty(t *testing.T) {
+	c, err := LoadBytes(nil)
+	if err != nil {
+		t.Fatalf("LoadBytes empty: %v", err)
+	}
+	if c.Listen == "" {
+		t.Error("expected defaults applied")
+	}
+}
+
 func TestLoadEmptyFileUsesDefaults(t *testing.T) {
 	// An empty or comment-only YAML file must not be a parse error: the
 	// caller gets a Config equal to Default(), which then passes Validate.

@@ -48,8 +48,7 @@ func main() {
 // (check=true) or renders the site to outDir.
 func run(inDir, outDir string, check bool) error {
 	if check {
-		// Task 16 fills this in.
-		return nil
+		return runChecks(inDir)
 	}
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return fmt.Errorf("mkdir out: %w", err)

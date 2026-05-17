@@ -35,6 +35,23 @@ func Load(path string) (Config, error) {
 	return c, nil
 }
 
+// LoadBytes is Load that takes an in-memory YAML payload rather than a
+// path. It applies Default(), unmarshals strictly (unknown fields
+// rejected), then validates. Used by docs validation to parse inline
+// configuration examples.
+func LoadBytes(data []byte) (Config, error) {
+	c := Default()
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(&c); err != nil && !errors.Is(err, io.EOF) {
+		return Config{}, fmt.Errorf("parse config: %w", err)
+	}
+	if err := Validate(&c); err != nil {
+		return Config{}, fmt.Errorf("invalid config: %w", err)
+	}
+	return c, nil
+}
+
 // Validate enforces semantic invariants on a Config. It must be called
 // after Load and after env-var application.
 func Validate(c *Config) error {
