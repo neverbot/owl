@@ -1,0 +1,19 @@
+{{define "sidenav"}}
+<nav class="docs__nav" aria-label="documentation sections">
+  {{range .Nav}}
+  <section class="docs__nav-section">
+    <h2 class="docs__nav-heading">{{.Section}}</h2>
+    <ul class="docs__nav-list">
+      {{range .Pages}}
+      <li>
+        <a href="{{.URL}}"
+           class="docs__nav-link{{if eq .URL $.URL}} docs__nav-link--current{{end}}">
+          {{.Title}}
+        </a>
+      </li>
+      {{end}}
+    </ul>
+  </section>
+  {{end}}
+</nav>
+{{end}}

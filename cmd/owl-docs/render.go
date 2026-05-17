@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"html/template"
+
 	"github.com/yuin/goldmark"
 	"gopkg.in/yaml.v3"
 )
@@ -137,14 +139,77 @@ func renderAll(inDir, outDir string) error {
 	if len(pages) == 0 {
 		return errors.New("no .md files found under " + inDir)
 	}
+	nav := buildNav(pages)
 	for _, p := range pages {
-		html, err := renderBody(p.Body)
+		body, err := renderBody(p.Body)
 		if err != nil {
 			return fmt.Errorf("%s: %w", p.SourcePath, err)
 		}
-		if err := writePage(outDir, p, html); err != nil {
+		view := PageView{
+			Title:    p.Frontmatter.Title,
+			Section:  p.Frontmatter.Section,
+			URL:      p.URL,
+			BodyHTML: template.HTML(body), // body is already-escaped HTML from goldmark
+			Nav:      nav,
+		}
+		var out bytes.Buffer
+		if err := docsTemplates.ExecuteTemplate(&out, "layout", view); err != nil {
+			return fmt.Errorf("%s: render layout: %w", p.SourcePath, err)
+		}
+		if err := writePage(outDir, p, out.String()); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// buildNav groups pages into ordered sections for the side nav.
+// Pages without a section land under "Misc".
+func buildNav(pages []*Page) []NavSection {
+	const misc = "Misc"
+	byOrder := []string{"Start", "Reference", "Operating", misc}
+	groups := map[string][]NavLink{}
+	for _, p := range pages {
+		sec := p.Frontmatter.Section
+		if sec == "" {
+			if p.URL == "/" {
+				continue // homepage doesn't appear in side nav
+			}
+			sec = misc
+		}
+		groups[sec] = append(groups[sec], NavLink{
+			Title: p.Frontmatter.Title, URL: p.URL,
+		})
+	}
+	// Stable order within each section: by nav_order then URL.
+	for sec := range groups {
+		links := groups[sec]
+		sortNavLinks(links, pages)
+		groups[sec] = links
+	}
+	out := make([]NavSection, 0, len(byOrder))
+	for _, sec := range byOrder {
+		if len(groups[sec]) > 0 {
+			out = append(out, NavSection{Section: sec, Pages: groups[sec]})
+		}
+	}
+	return out
+}
+
+// sortNavLinks sorts links in place by (NavOrder, URL).
+func sortNavLinks(links []NavLink, allPages []*Page) {
+	orderOf := map[string]int{}
+	for _, p := range allPages {
+		orderOf[p.URL] = p.Frontmatter.NavOrder
+	}
+	for i := 1; i < len(links); i++ {
+		for j := i; j > 0; j-- {
+			a, b := links[j-1], links[j]
+			ao, bo := orderOf[a.URL], orderOf[b.URL]
+			if ao < bo || (ao == bo && a.URL <= b.URL) {
+				break
+			}
+			links[j-1], links[j] = b, a
+		}
+	}
 }

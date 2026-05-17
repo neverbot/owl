@@ -1,0 +1,61 @@
+/* Layout-specific styles for the docs site. Uses tokens from
+   /static/owl.css; only adds rules for selectors the runtime UI
+   doesn't have (.docs__*, .topbar__suffix, .search__*). */
+
+.docs {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: var(--s-6);
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--s-5) var(--s-5) var(--s-7);
+}
+
+.docs__nav { position: sticky; top: var(--s-5); align-self: start; }
+.docs__nav-section + .docs__nav-section { margin-top: var(--s-5); }
+.docs__nav-heading {
+  font-size: var(--fs-xs); text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--muted); margin: 0 0 var(--s-2);
+}
+.docs__nav-list { list-style: none; padding: 0; margin: 0; }
+.docs__nav-link {
+  display: block; padding: var(--s-1) 0; color: var(--fg);
+  text-decoration: none; font-size: var(--fs-sm);
+}
+.docs__nav-link:hover { color: var(--accent); }
+.docs__nav-link--current { color: var(--accent); font-weight: 500; }
+
+.docs__article { max-width: 70ch; }
+.docs__article h1 { font-size: var(--fs-xl); margin-top: 0; }
+.docs__article h2 { font-size: var(--fs-lg); margin-top: var(--s-6); }
+.docs__article h3 { font-size: var(--fs-md); margin-top: var(--s-5); }
+.docs__article p, .docs__article li { line-height: 1.6; }
+.docs__article pre {
+  background: var(--bg); border: 1px solid var(--rule);
+  padding: var(--s-3); border-radius: 4px; overflow-x: auto;
+  font-family: var(--font-mono); font-size: var(--fs-sm);
+}
+.docs__article code { font-family: var(--font-mono); font-size: 0.92em; }
+.docs__article table {
+  width: 100%; border-collapse: collapse; margin: var(--s-4) 0;
+  font-size: var(--fs-sm);
+}
+.docs__article th, .docs__article td {
+  padding: var(--s-2) var(--s-3); border-bottom: 1px solid var(--rule);
+  text-align: left;
+}
+
+.topbar__suffix { color: var(--muted); margin-left: 0.2em; font-weight: 400; }
+.search { position: relative; flex: 0 1 300px; }
+.search input[type=search] {
+  width: 100%; padding: var(--s-2) var(--s-3);
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--rule); border-radius: 4px;
+  font-family: var(--font-sans); font-size: var(--fs-sm);
+}
+.search__results {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+  background: var(--bg-elevated); border: 1px solid var(--rule);
+  border-radius: 4px; box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+  max-height: 60vh; overflow-y: auto; padding: var(--s-2);
+}

@@ -16,6 +16,7 @@
 package main
 
 import (
+	_ "embed"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -24,6 +25,9 @@ import (
 
 	"github.com/neverbot/owl/internal/design"
 )
+
+//go:embed static/docs.css
+var docsCSS []byte
 
 func main() {
 	in := flag.String("in", "docs/site/content", "content source directory")
@@ -56,6 +60,9 @@ func run(inDir, outDir string, check bool) error {
 	}
 	if err := os.WriteFile(filepath.Join(staticDir, "app.js"), design.ChartJS(), 0o644); err != nil {
 		return fmt.Errorf("write chart.js: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(staticDir, "docs.css"), docsCSS, 0o644); err != nil {
+		return fmt.Errorf("write docs.css: %w", err)
 	}
 	if err := renderAll(inDir, outDir); err != nil {
 		return fmt.Errorf("render: %w", err)

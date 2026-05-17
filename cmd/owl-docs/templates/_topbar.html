@@ -1,0 +1,18 @@
+{{define "topbar"}}
+<header class="topbar">
+  <a class="topbar__brand" href="/">owl<span class="topbar__suffix">docs</span></a>
+  <nav class="topbar__crumbs" aria-label="breadcrumb">
+    {{if .Section}}<span class="topbar__crumb">{{.Section}}</span>
+    <span class="topbar__sep">·</span>{{end}}
+    <span class="topbar__crumb topbar__crumb--current">{{.Title}}</span>
+  </nav>
+  <form class="search" role="search" data-search>
+    <input type="search" placeholder="Search docs…" aria-label="Search"
+           data-search-input autocomplete="off" spellcheck="false">
+    <div class="search__results" data-search-results hidden></div>
+  </form>
+  <button class="theme-toggle" type="button" aria-label="Toggle theme" data-theme-toggle>
+    <span class="theme-toggle__icon">◐</span>
+  </button>
+</header>
+{{end}}

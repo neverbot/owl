@@ -1,0 +1,33 @@
+{{define "layout"}}<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>{{.Title}} · owl docs</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/owl.css">
+<link rel="stylesheet" href="/static/docs.css">
+<script>
+  (function () {
+    var saved = localStorage.getItem("owl-theme");
+    var prefersDark = window.matchMedia &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches;
+    var theme = saved || (prefersDark ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", theme);
+  })();
+</script>
+</head>
+<body>
+{{template "topbar" .}}
+<div class="docs">
+  {{template "sidenav" .}}
+  <main class="docs__main">
+    <article class="docs__article">
+      {{.BodyHTML}}
+    </article>
+  </main>
+</div>
+<script src="/static/app.js"></script>
+<script src="/static/search.js" defer></script>
+</body>
+</html>
+{{end}}
