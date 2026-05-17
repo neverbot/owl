@@ -59,3 +59,14 @@
   border-radius: 4px; box-shadow: 0 4px 14px rgba(0,0,0,0.08);
   max-height: 60vh; overflow-y: auto; padding: var(--s-2);
 }
+
+.search__result {
+  display: block; padding: var(--s-2) var(--s-3); text-decoration: none;
+  color: var(--fg); border-radius: 3px;
+}
+.search__result:hover { background: var(--bg); }
+.search__crumb { font-size: var(--fs-sm); color: var(--muted); }
+.search__crumb strong { color: var(--fg); font-weight: 500; }
+.search__snippet { font-size: var(--fs-sm); color: var(--muted); margin-top: 2px; }
+.search__empty { padding: var(--s-2) var(--s-3); color: var(--muted); font-size: var(--fs-sm); }
+mark { background: var(--accent); color: var(--bg); padding: 0 0.15em; border-radius: 2px; }

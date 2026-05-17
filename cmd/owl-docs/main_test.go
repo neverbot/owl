@@ -31,6 +31,22 @@ func TestRunWritesDesignAssets(t *testing.T) {
 	}
 }
 
+func TestRunWritesSearchJS(t *testing.T) {
+	in := t.TempDir()
+	out := t.TempDir()
+	if err := os.WriteFile(filepath.Join(in, "index.md"),
+		[]byte("---\ntitle: Home\n---\nhi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(in, out, false); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(filepath.Join(out, "static/search.js"))
+	if err != nil || info.Size() == 0 {
+		t.Fatalf("search.js missing or empty: %v", err)
+	}
+}
+
 func TestRunCheckIsNoop(t *testing.T) {
 	in := t.TempDir()
 	if err := run(in, "", true); err != nil {

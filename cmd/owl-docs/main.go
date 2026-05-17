@@ -29,6 +29,9 @@ import (
 //go:embed static/docs.css
 var docsCSS []byte
 
+//go:embed static/search.js
+var searchJS []byte
+
 func main() {
 	in := flag.String("in", "docs/site/content", "content source directory")
 	out := flag.String("out", "docs/site/dist", "output directory (ignored in --check)")
@@ -63,6 +66,9 @@ func run(inDir, outDir string, check bool) error {
 	}
 	if err := os.WriteFile(filepath.Join(staticDir, "docs.css"), docsCSS, 0o644); err != nil {
 		return fmt.Errorf("write docs.css: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(staticDir, "search.js"), searchJS, 0o644); err != nil {
+		return fmt.Errorf("write search.js: %w", err)
 	}
 	if err := renderAll(inDir, outDir); err != nil {
 		return fmt.Errorf("render: %w", err)
