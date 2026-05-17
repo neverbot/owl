@@ -60,7 +60,7 @@ func TestStaticAssetIsServed(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d", rec.Code)
 	}
-	if ct := rec.Header().Get("Content-Type"); ct != "application/javascript" {
+	if ct := rec.Header().Get("Content-Type"); ct != "application/javascript; charset=utf-8" {
 		t.Errorf("content-type = %q", ct)
 	}
 }

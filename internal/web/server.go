@@ -10,6 +10,7 @@ import (
 
 	"github.com/neverbot/owl/internal/alert"
 	"github.com/neverbot/owl/internal/dashboards"
+	"github.com/neverbot/owl/internal/design"
 	"github.com/neverbot/owl/internal/query"
 	"github.com/neverbot/owl/internal/scrape"
 	"github.com/neverbot/owl/internal/storage"
@@ -100,6 +101,19 @@ func (s *Server) indexOrStatic(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request, name string) {
+	// The shared CSS tokens and chart JS live in internal/design and
+	// are served at the same runtime URLs that the templates already
+	// reference. Anything else falls back to the local staticFS.
+	switch name {
+	case "static/owl.css":
+		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+		_, _ = w.Write(design.TokensCSS())
+		return
+	case "static/app.js":
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		_, _ = w.Write(design.ChartJS())
+		return
+	}
 	data, err := fs.ReadFile(staticFS, name)
 	if err != nil {
 		s.serveNotFound(w, r)
