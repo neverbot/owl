@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/neverbot/owl/internal/alert"
@@ -72,6 +73,66 @@ func TestMetricsEndpointOmitsAlerterWhenNil(t *testing.T) {
 	s.ServeHTTP(rec, req)
 	if bytes.Contains(rec.Body.Bytes(), []byte("owl_alerts_")) {
 		t.Error("owl_alerts_* lines leaked when Alerter is nil")
+	}
+}
+
+// TestRegistryHasEveryMetricEmitted asserts that every descriptor in
+// Registry() that is available in a fully-wired server actually shows
+// up in the /metrics body — guarding against the registry and the
+// dispatch table drifting apart.
+func TestRegistryHasEveryMetricEmitted(t *testing.T) {
+	s := NewServer(Options{
+		Alerter: fakeAlerterStats{s: alert.Stats{}},
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	s.ServeHTTP(rec, req)
+	body := rec.Body.String()
+
+	// Metrics whose value source is wired in this test (Store and
+	// Loader are still nil so the corresponding descriptors are
+	// expected to be absent — they are not a registry/dispatch bug).
+	skip := map[string]bool{
+		"owl_storage_samples_total": true,
+		"owl_storage_size_bytes":    true,
+		"owl_dashboards_loaded":     true,
+	}
+	for _, d := range Registry() {
+		if skip[d.Name] {
+			continue
+		}
+		if !strings.Contains(body, "# HELP "+d.Name) {
+			t.Errorf("metric %q in registry but not emitted at /metrics", d.Name)
+		}
+	}
+}
+
+// TestRegistryHelpMatchesEmittedHelp asserts the HELP text emitted on
+// /metrics is exactly the descriptor's Help string, so the docs site
+// table and the live exposition stay byte-for-byte aligned.
+func TestRegistryHelpMatchesEmittedHelp(t *testing.T) {
+	s := NewServer(Options{
+		Alerter: fakeAlerterStats{s: alert.Stats{}},
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	s.ServeHTTP(rec, req)
+	body := rec.Body.String()
+
+	skip := map[string]bool{
+		"owl_storage_samples_total": true,
+		"owl_storage_size_bytes":    true,
+		"owl_dashboards_loaded":     true,
+	}
+	for _, d := range Registry() {
+		if skip[d.Name] {
+			continue
+		}
+		want := "# HELP " + d.Name + " " + d.Help
+		if !strings.Contains(body, want) {
+			t.Errorf("HELP mismatch for %q: want %q somewhere in output",
+				d.Name, want)
+		}
 	}
 }
 
