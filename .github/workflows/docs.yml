@@ -1,0 +1,40 @@
+name: docs
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "cmd/owl-docs/**"
+      - "internal/design/**"
+      - "internal/config/**"
+      - "internal/query/**"
+      - "internal/web/metrics.go"
+      - "docs/site/content/**"
+      - ".github/workflows/docs.yml"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+      - run: make docs
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/site/dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
