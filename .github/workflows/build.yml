@@ -35,6 +35,12 @@ jobs:
       - name: Test
         run: make test
 
+      - name: Docs check
+        run: make docs-check
+
+      - name: Docs build (smoke)
+        run: make docs
+
   publish:
     name: Build and publish container image
     needs: test
