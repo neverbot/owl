@@ -212,6 +212,14 @@ restarts cleanly).
   Mathematically equivalent to `rate(expr[w]) * window-seconds`.
   Best for "how many X happened in the last hour" tables and
   threshold rules.
+- **`delta(expr[w])`** — `last - first` across the window. Unlike
+  `increase`, it does not assume the input is a monotonic counter;
+  decreases yield negative values. Use it for gauges.
+- **`avg_over_time(expr[w])`**, **`sum_over_time`**, **`min_over_time`**,
+  **`max_over_time`**, **`count_over_time`** — collapse every sample
+  in the per-step window to a single value per series. Useful for
+  smoothing noisy gauges or counting how many readings fell inside
+  the window.
 
 ```promql
 histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))
@@ -247,6 +255,20 @@ Operators: `sum`, `avg`, `min`, `max`, `count`. The `by (labels)` form
 groups output series by the listed labels; the `without (labels)` form
 drops the listed labels and groups by every label that remains.
 
+**Top-N selection**
+
+```promql
+topk(5, rate(container_cpu_usage_seconds_total[1m]))
+bottomk(3, node_filesystem_avail_bytes)
+```
+
+- **`topk(k, expr)`** — at each evaluation step, keeps only the `k`
+  series with the largest values; the rest are dropped from the
+  result. Labels are preserved (unlike `sum`/`avg`, which group).
+- **`bottomk(k, expr)`** — same but smallest. Ties break
+  deterministically by canonical label string so output is stable
+  across runs.
+
 **Arithmetic**
 
 ```promql
@@ -277,10 +299,10 @@ The list below is concrete. Any of these will return a parse error or
 fail to match a series; the dashboard layer marks the affected panel
 as "unsupported" with the engine's reason. PRs welcome.
 
-**Functions**: `delta`, `idelta`, `deriv`,
+**Functions**: `idelta`, `deriv`,
 `predict_linear`, `holt_winters`,
-`*_over_time` (avg_over_time, max_over_time, …), `abs`/`ceil`/`floor`/`round`/`sqrt`/`ln`/`log2`/`log10`/`exp`,
-`topk`/`bottomk`/`quantile`, `clamp`/`clamp_min`/`clamp_max`,
+`abs`/`ceil`/`floor`/`round`/`sqrt`/`ln`/`log2`/`log10`/`exp`,
+`quantile`, `clamp`/`clamp_min`/`clamp_max`,
 `label_replace`/`label_join`, `time`/`vector`/`scalar`,
 `sort`/`sort_desc`, `absent`/`absent_over_time`, `changes`, `resets`.
 
@@ -310,19 +332,19 @@ down.
 
 ## API
 
-| Endpoint | Description |
-|---|---|
-| `GET /` | Index of dashboards |
-| `GET /d/{id}` | Server-rendered dashboard view |
-| `GET /api/query?expr=&from=&to=&step=` | Evaluate a PromQL expression and return series JSON |
-| `GET /api/dashboards` | List of dashboards |
-| `GET /api/dashboards/{id}` | One dashboard with its panels |
-| `GET /targets` | Server-rendered table of scrape targets and their last status |
-| `GET /api/targets` | Per-target health (URL, last scrape, duration, samples, last error) as JSON |
-| `GET /-/healthy` | `ok` on a healthy process |
-| `POST /-/reload` (also `GET`) | Re-read config.yml and dashboards/*.json; same effect as `SIGHUP` |
-| `GET /metrics` | owl's own metrics in Prometheus text exposition format |
-| `GET /static/*` | Embedded JS / CSS assets |
+| Endpoint                               | Description                                                                 |
+|:---------------------------------------|:----------------------------------------------------------------------------|
+| `GET /`                                | Index of dashboards                                                         |
+| `GET /d/{id}`                          | Server-rendered dashboard view                                              |
+| `GET /api/query?expr=&from=&to=&step=` | Evaluate a PromQL expression and return series JSON                         |
+| `GET /api/dashboards`                  | List of dashboards                                                          |
+| `GET /api/dashboards/{id}`             | One dashboard with its panels                                               |
+| `GET /targets`                         | Server-rendered table of scrape targets and their last status               |
+| `GET /api/targets`                     | Per-target health (URL, last scrape, duration, samples, last error) as JSON |
+| `GET /-/healthy`                       | `ok` on a healthy process                                                   |
+| `POST /-/reload` (also `GET`)          | Re-read config.yml and dashboards/*.json; same effect as `SIGHUP`           |
+| `GET /metrics`                         | owl's own metrics in Prometheus text exposition format                      |
+| `GET /static/*`                        | Embedded JS / CSS assets                                                    |
 
 The `/metrics` payload covers process vitals (`owl_goroutines`,
 `owl_heap_objects_bytes`, `owl_gc_pause_seconds_total`), storage
