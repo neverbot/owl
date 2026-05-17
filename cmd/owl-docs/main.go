@@ -57,6 +57,8 @@ func run(inDir, outDir string, check bool) error {
 	if err := os.WriteFile(filepath.Join(staticDir, "app.js"), design.ChartJS(), 0o644); err != nil {
 		return fmt.Errorf("write chart.js: %w", err)
 	}
-	_ = inDir // content rendering arrives in Task 6
+	if err := renderAll(inDir, outDir); err != nil {
+		return fmt.Errorf("render: %w", err)
+	}
 	return nil
 }

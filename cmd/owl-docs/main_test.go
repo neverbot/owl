@@ -9,6 +9,10 @@ import (
 func TestRunWritesDesignAssets(t *testing.T) {
 	in := t.TempDir()
 	out := t.TempDir()
+	if err := os.WriteFile(filepath.Join(in, "index.md"),
+		[]byte("---\ntitle: Home\n---\nhi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := run(in, out, false); err != nil {
 		t.Fatalf("run: %v", err)
