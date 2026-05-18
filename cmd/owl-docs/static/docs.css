@@ -237,10 +237,29 @@ mark {
 }
 
 /* Chart panels embedded in pages — keep them inside the column,
-   give them breathing room from surrounding text. Title styling
-   inherits from tokens.css so docs charts match runtime dashboards. */
+   give them breathing room from surrounding text. Article-level
+   heading rules above bleed into the panel's <h2 class="panel__title">
+   because they share specificity and the docs stylesheet loads last,
+   so we re-assert the runtime's title/value sizes here. The intent is
+   that a docs panel looks pixel-for-pixel like a runtime dashboard
+   panel. */
 .docs__article .panel {
   margin: var(--s-5) 0;
+}
+.docs__article .panel__title {
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.docs__article .panel__value {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-lg);
+  color: var(--fg);
+  letter-spacing: -0.01em;
 }
 
 /* ─────────────────────────────────────────────────────────────────
