@@ -113,12 +113,12 @@ func TestRangeEmpty(t *testing.T) {
 	s := newStore(t)
 	defer s.Close()
 
-	min, max, ok, err := s.Range()
+	minTS, maxTS, ok, err := s.Range()
 	if err != nil {
 		t.Fatalf("Range: %v", err)
 	}
 	if ok {
-		t.Fatalf("expected ok=false on empty store, got min=%d max=%d", min, max)
+		t.Fatalf("expected ok=false on empty store, got minTS=%d maxTS=%d", minTS, maxTS)
 	}
 }
 
@@ -135,17 +135,17 @@ func TestRangeWithSamples(t *testing.T) {
 		t.Fatalf("Append: %v", err)
 	}
 
-	min, max, ok, err := s.Range()
+	minTS, maxTS, ok, err := s.Range()
 	if err != nil {
 		t.Fatalf("Range: %v", err)
 	}
 	if !ok {
 		t.Fatalf("expected ok=true with samples present")
 	}
-	if min != ms(100) {
-		t.Errorf("min: got %d want %d", min, ms(100))
+	if minTS != ms(100) {
+		t.Errorf("minTS: got %d want %d", minTS, ms(100))
 	}
-	if max != ms(200) {
-		t.Errorf("max: got %d want %d", max, ms(200))
+	if maxTS != ms(200) {
+		t.Errorf("maxTS: got %d want %d", maxTS, ms(200))
 	}
 }
