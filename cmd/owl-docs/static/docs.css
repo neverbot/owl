@@ -135,11 +135,13 @@ mark {
    Article — typography, code, tables, links
    ───────────────────────────────────────────────────────────────── */
 
-/* The article is wide enough that screenshots and panels can sit
-   centred with breathing room on either side. Prose-bearing elements
-   below re-constrain themselves to a comfortable reading measure;
-   image-only paragraphs opt out via :has() so they can centre across
-   the full column. */
+/* The article column is wide enough that screenshots can sit
+   centred with breathing room on either side. Everything else
+   (prose, code, tables, chart panels) re-constrains itself to one
+   consistent readable measure, anchored in rem so it doesn't change
+   between sans and monospace contexts. Image-only paragraphs opt
+   out via :has() so they can centre across the full column. */
+:root { --w-read: 38rem; }
 .docs__article { padding-top: var(--s-2); }
 .docs__article > p,
 .docs__article > ul,
@@ -148,7 +150,10 @@ mark {
 .docs__article > h2,
 .docs__article > h3,
 .docs__article > h4,
-.docs__article > blockquote { max-width: 72ch; }
+.docs__article > pre,
+.docs__article > blockquote,
+.docs__article > table,
+.docs__article > .panel { max-width: var(--w-read); }
 .docs__article > p:has(> img:only-child) { max-width: none; text-align: center; }
 
 .docs__article h1 {
