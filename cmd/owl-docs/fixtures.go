@@ -301,27 +301,25 @@ func heroMultiSeries() Fixture {
 }
 
 // hostCPU synthesises four cpu-mode time series (user, system,
-// iowait, idle) for a single core. user/system spike up under load
-// and idle drops to mirror; iowait stays low and bursty.
+// iowait, idle) for a single core, expressed as the fraction of a
+// second of CPU time per second — i.e. the output of
+// `rate(node_cpu_seconds_total[1m])`. Values live in [0, 1] because
+// chart.js's "percent" formatter multiplies by 100 on render.
 func hostCPU() Fixture {
 	const n = 80
 	out := []FixtureSeries{}
 	confs := map[string]struct {
 		base, drift, noise, spikeProb, spike float64
 	}{
-		"user":   {base: 22, drift: 0, noise: 4.5, spikeProb: 0.07, spike: 25},
-		"system": {base: 9, drift: 0, noise: 2.0, spikeProb: 0.05, spike: 9},
-		"iowait": {base: 3, drift: 0, noise: 1.0, spikeProb: 0.04, spike: 7},
-		"idle":   {base: 66, drift: 0, noise: 4.5, spikeProb: 0.05, spike: -22},
+		"user":   {base: 0.22, drift: 0, noise: 0.045, spikeProb: 0.07, spike: 0.25},
+		"system": {base: 0.09, drift: 0, noise: 0.020, spikeProb: 0.05, spike: 0.09},
+		"iowait": {base: 0.03, drift: 0, noise: 0.010, spikeProb: 0.04, spike: 0.07},
+		"idle":   {base: 0.66, drift: 0, noise: 0.045, spikeProb: 0.05, spike: -0.22},
 	}
 	for s, mode := range []string{"user", "system", "iowait", "idle"} {
 		c := confs[mode]
 		g := newGen(int64(505 + s))
-		clampMax := 100.0
-		if mode == "idle" {
-			clampMax = 100.0
-		}
-		vals := g.randomWalk(n, c.base, c.drift, c.noise, c.spikeProb, c.spike, 0, clampMax)
+		vals := g.randomWalk(n, c.base, c.drift, c.noise, c.spikeProb, c.spike, 0, 1)
 		out = append(out, FixtureSeries{
 			Metric: "node_cpu_seconds_total",
 			Labels: map[string]string{"mode": mode, "cpu": "0"},
