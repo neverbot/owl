@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"math/rand"
 	"sort"
@@ -271,29 +272,29 @@ func histogramLatency() Fixture {
 }
 
 // heroMultiSeries synthesises five distinct random walks suited to a
-// wide multi-series hero chart. Each surface has its own baseline,
-// drift and noise scale so the curves stay distinguishable while
-// looking like real telemetry rather than parametric curves.
+// wide multi-series hero chart. Series are intentionally labelled
+// data1…data5 (not "web"/"db"/etc.) so a reader can tell at a glance
+// the chart is a visual demo of owl's chart engine, not a comparison
+// of products or a real workload breakdown.
 func heroMultiSeries() Fixture {
 	const n = 120
 	out := []FixtureSeries{}
 	type cfg struct {
 		base, drift, noise, spikeProb, spike float64
 	}
-	confs := map[string]cfg{
-		"web":   {base: 48, drift: 0.05, noise: 3.5, spikeProb: 0.05, spike: 14},
-		"db":    {base: 36, drift: -0.02, noise: 2.5, spikeProb: 0.03, spike: 9},
-		"cache": {base: 26, drift: 0.08, noise: 1.8, spikeProb: 0.02, spike: 6},
-		"queue": {base: 60, drift: -0.06, noise: 4.5, spikeProb: 0.08, spike: 18},
-		"edge":  {base: 42, drift: 0.04, noise: 3.0, spikeProb: 0.04, spike: 12},
+	confs := []cfg{
+		{base: 48, drift: 0.05, noise: 3.5, spikeProb: 0.05, spike: 14},
+		{base: 36, drift: -0.02, noise: 2.5, spikeProb: 0.03, spike: 9},
+		{base: 26, drift: 0.08, noise: 1.8, spikeProb: 0.02, spike: 6},
+		{base: 60, drift: -0.06, noise: 4.5, spikeProb: 0.08, spike: 18},
+		{base: 42, drift: 0.04, noise: 3.0, spikeProb: 0.04, spike: 12},
 	}
-	for s, name := range []string{"web", "db", "cache", "queue", "edge"} {
-		c := confs[name]
+	for s, c := range confs {
 		g := newGen(int64(404 + s))
 		vals := g.randomWalk(n, c.base, c.drift, c.noise, c.spikeProb, c.spike, 0, math.Inf(1))
 		out = append(out, FixtureSeries{
 			Metric: "demo_signal",
-			Labels: map[string]string{"surface": name},
+			Labels: map[string]string{"series": fmt.Sprintf("data%d", s+1)},
 			Points: pointsFor(vals, 60),
 		})
 	}
