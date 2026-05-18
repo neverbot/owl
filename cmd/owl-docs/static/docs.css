@@ -131,6 +131,32 @@ mark {
 .docs__nav-link:hover { color: var(--accent); }
 .docs__nav-link--current { color: var(--accent); font-weight: 500; }
 
+/* Footer slot under the section list — currently just the
+   "view source on GitHub" affordance, sized and toned to match the
+   rest of the sidebar so it reads as a quiet anchor, not a CTA. */
+.docs__nav-footer {
+  margin-top: var(--s-5);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--rule);
+}
+.docs__nav-github {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--muted);
+  border-radius: var(--r-sm);
+  transition: color var(--t-fast) var(--ease-out),
+              background-color var(--t-fast) var(--ease-out);
+}
+.docs__nav-github:hover { color: var(--fg); background: var(--bg-elevated); }
+.docs__nav-github:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.docs__nav-github svg { width: 16px; height: 16px; display: block; }
+
 /* ─────────────────────────────────────────────────────────────────
    Article — typography, code, tables, links
    ───────────────────────────────────────────────────────────────── */
