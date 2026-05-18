@@ -3,10 +3,13 @@ package web
 
 import (
 	"embed"
+	"encoding/json"
 	"html/template"
 	"io/fs"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/neverbot/owl/internal/alert"
 	"github.com/neverbot/owl/internal/dashboards"
@@ -58,6 +61,15 @@ type Server struct {
 	mux  *http.ServeMux
 	opt  Options
 	tmpl *template.Template
+
+	// nowFn is overridable so tests can pin time around the
+	// /api/range cache without sleeping.
+	nowFn func() time.Time
+
+	rangeMu       sync.Mutex
+	rangeCachedAt time.Time
+	rangeMinTS    *int64
+	rangeMaxTS    *int64
 }
 
 // NewServer constructs the HTTP handler with all routes registered.
@@ -68,6 +80,7 @@ func NewServer(opt Options) *Server {
 		opt:  opt,
 		tmpl: tmpl,
 	}
+	s.nowFn = time.Now
 	s.registerRoutes()
 	return s
 }
@@ -81,6 +94,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/-/reload", s.reload)
 	s.mux.HandleFunc("/metrics", s.metrics)
 	s.mux.HandleFunc("/api/query", s.apiQuery)
+	s.mux.HandleFunc("/api/range", s.apiRange)
 	s.mux.HandleFunc("/api/dashboards/", s.apiDashboardByID)
 	s.mux.HandleFunc("/api/dashboards", s.apiDashboards)
 	s.mux.HandleFunc("/api/targets", s.apiTargets)
@@ -159,4 +173,48 @@ func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request, name string
 		w.Header().Set("Content-Type", "text/css")
 	}
 	_, _ = w.Write(data)
+}
+
+// rangeTTL is how long /api/range caches the MIN/MAX query result.
+// 30 s is well under the user-perceptible threshold for "is my
+// retention boundary current?" and well over the burst window a
+// page that polls every panel could ever produce.
+const rangeTTL = 30 * time.Second
+
+// apiRange returns the smallest and largest sample timestamp in the
+// store, in milliseconds since epoch. Either field is null when the
+// store is empty. The result is cached for rangeTTL to absorb bursts
+// of dashboard opens and calendar popovers.
+func (s *Server) apiRange(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Store == nil {
+		http.Error(w, "store unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	s.rangeMu.Lock()
+	defer s.rangeMu.Unlock()
+
+	if s.nowFn().Sub(s.rangeCachedAt) > rangeTTL {
+		minTS, maxTS, ok, err := s.opt.Store.Range()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if ok {
+			s.rangeMinTS = &minTS
+			s.rangeMaxTS = &maxTS
+		} else {
+			s.rangeMinTS = nil
+			s.rangeMaxTS = nil
+		}
+		s.rangeCachedAt = s.nowFn()
+	}
+
+	body := struct {
+		MinTS *int64 `json:"min_ts"`
+		MaxTS *int64 `json:"max_ts"`
+	}{MinTS: s.rangeMinTS, MaxTS: s.rangeMaxTS}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(body)
 }
