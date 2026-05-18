@@ -44,7 +44,7 @@ func extractSearchEntries(p *Page, body string) []SearchRecord {
 	doc := goldmark.DefaultParser().Parse(reader)
 
 	page := SearchRecord{
-		URL:        p.URL,
+		URL:        withBase(p.URL),
 		Title:      p.Frontmatter.Title,
 		Breadcrumb: p.Frontmatter.Section,
 		Snippet:    firstParagraphText(doc, src),
@@ -64,7 +64,7 @@ func extractSearchEntries(p *Page, body string) []SearchRecord {
 		anchor := slugify(title)
 		snippet := paragraphAfter(h, src)
 		out = append(out, SearchRecord{
-			URL:        p.URL + "#" + anchor,
+			URL:        withBase(p.URL) + "#" + anchor,
 			Title:      title,
 			Breadcrumb: p.Frontmatter.Section + " · " + p.Frontmatter.Title,
 			Snippet:    snippet,

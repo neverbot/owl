@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"html/template"
@@ -139,13 +140,35 @@ func loadPages(contentRoot string) ([]*Page, error) {
 // renderBody converts Markdown to HTML using docsMarkdown, which
 // is configured with GFM tables, raw-HTML pass-through (so partial
 // HTML survives), auto heading IDs and chroma syntax highlighting.
-// Partial expansion happens *before* this call.
+// Partial expansion happens *before* this call. After rendering, any
+// site-internal absolute href ("/getting-started/", "/promql/#rate")
+// is rewritten with the configured base URL prefix so the same
+// markdown content publishes correctly under "/" or "/owl/".
 func renderBody(body string) (string, error) {
 	var buf bytes.Buffer
 	if err := docsMarkdown.Convert([]byte(body), &buf); err != nil {
 		return "", fmt.Errorf("goldmark: %w", err)
 	}
-	return buf.String(), nil
+	return rewriteInternalHrefs(buf.String()), nil
+}
+
+// internalHrefRE matches href="/path" attributes whose path starts
+// with a single slash followed by a letter, digit or "#" — i.e. a
+// site-internal absolute URL. Protocol-relative ("//cdn") and full
+// URLs ("https://…") are skipped because they don't begin with "/x".
+var internalHrefRE = regexp.MustCompile(`href="(/[A-Za-z0-9#][^"]*)"`)
+
+// rewriteInternalHrefs prefixes every internal absolute href in the
+// rendered HTML with the configured base URL. No-op when baseURL is
+// empty.
+func rewriteInternalHrefs(s string) string {
+	if baseURL == "" {
+		return s
+	}
+	return internalHrefRE.ReplaceAllStringFunc(s, func(match string) string {
+		groups := internalHrefRE.FindStringSubmatch(match)
+		return `href="` + withBase(groups[1]) + `"`
+	})
 }
 
 // writePage materialises a Page to disk as outDir/<URL>/index.html.
@@ -190,6 +213,7 @@ func renderAll(inDir, outDir string) error {
 			URL:      p.URL,
 			BodyHTML: template.HTML(body), // body is already-escaped HTML from goldmark
 			Nav:      nav,
+			BaseURL:  baseURL,
 		}
 		var out bytes.Buffer
 		if err := docsTemplates.ExecuteTemplate(&out, "layout", view); err != nil {

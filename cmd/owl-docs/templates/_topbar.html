@@ -1,6 +1,6 @@
 {{define "topbar"}}
 <nav class="topbar">
-  <a class="topbar__brand" href="/">owl<span class="topbar__suffix">docs</span></a>
+  <a class="topbar__brand" href="{{base "/"}}">owl<span class="topbar__suffix">docs</span></a>
   <div class="topbar__crumbs">
     {{if .Section}}<span class="topbar__crumb-section">{{.Section}}</span><span class="sep">·</span>{{end}}
     <span class="current">{{.Title}}</span>

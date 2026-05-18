@@ -6,7 +6,7 @@
     <ul class="docs__nav-list">
       {{range .Pages}}
       <li>
-        <a href="{{.URL}}"
+        <a href="{{base .URL}}"
            class="docs__nav-link{{if eq .URL $.URL}} docs__nav-link--current{{end}}">
           {{.Title}}
         </a>

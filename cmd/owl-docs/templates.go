@@ -16,8 +16,12 @@ var docsTemplates = mustParseTemplates()
 // mustParseTemplates parses every template under templates/ at init.
 // It panics on failure because a malformed template would block the
 // generator from producing any output and should be caught immediately.
+// The funcs map exposes withBase to templates as "base", so any href
+// or src can prefix site-internal paths with the configured base URL.
 func mustParseTemplates() *template.Template {
-	t, err := template.ParseFS(templateFS, "templates/*.html")
+	t, err := template.New("docs").Funcs(template.FuncMap{
+		"base": withBase,
+	}).ParseFS(templateFS, "templates/*.html")
 	if err != nil {
 		panic(fmt.Sprintf("parse templates: %v", err))
 	}
@@ -32,6 +36,11 @@ type PageView struct {
 	URL      string
 	BodyHTML template.HTML
 	Nav      []NavSection
+	// BaseURL is the prefix every site-internal absolute URL lives
+	// under. It is the empty string when the site is rooted at "/",
+	// or e.g. "/owl" when published to a GitHub Pages subdirectory.
+	// Templates use the `base` func instead of reading this directly.
+	BaseURL string
 }
 
 // NavSection groups pages under one side-nav heading.

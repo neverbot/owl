@@ -73,7 +73,7 @@ func chartPartial(args map[string]string) (string, error) {
 		unitMarkup = fmt.Sprintf(`<span class="panel__unit">%s</span>`, unit)
 	}
 	return fmt.Sprintf(
-		`<article class="panel" data-static="/data/%s.json" data-expr=%q data-unit=%q data-refresh="0">
+		`<article class="panel" data-static=%q data-expr=%q data-unit=%q data-refresh="0">
   <header class="panel__header">
     <h2 class="panel__title">%s</h2>
     %s
@@ -84,5 +84,5 @@ func chartPartial(args map[string]string) (string, error) {
     <div class="panel__legend"></div>
   </footer>
 </article>`,
-		name, args["expr"], unit, title, unitMarkup, title), nil
+		withBase("/data/"+name+".json"), args["expr"], unit, title, unitMarkup, title), nil
 }

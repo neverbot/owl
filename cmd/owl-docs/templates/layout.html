@@ -4,8 +4,9 @@
 <meta charset="utf-8">
 <title>{{.Title}} · owl docs</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="/static/owl.css">
-<link rel="stylesheet" href="/static/docs.css">
+<meta name="owl-docs-base" content="{{.BaseURL}}">
+<link rel="stylesheet" href="{{base "/static/owl.css"}}">
+<link rel="stylesheet" href="{{base "/static/docs.css"}}">
 <script>
   (function () {
     var saved = localStorage.getItem("owl-theme");
@@ -28,8 +29,8 @@
     </article>
   </main>
 </div>
-<script src="/static/app.js"></script>
-<script src="/static/search.js" defer></script>
+<script src="{{base "/static/app.js"}}"></script>
+<script src="{{base "/static/search.js"}}" defer></script>
 </body>
 </html>
 {{end}}

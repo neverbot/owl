@@ -3,13 +3,18 @@
   if (!form) return;
   const input = form.querySelector("[data-search-input]");
   const results = form.querySelector("[data-search-results]");
+  // The base URL prefix is published in the page head by layout.html.
+  // It is "" when the site is rooted at "/", or e.g. "/owl" when
+  // hosted under a GitHub Pages subdirectory.
+  const baseMeta = document.querySelector('meta[name="owl-docs-base"]');
+  const base = (baseMeta && baseMeta.getAttribute("content")) || "";
   let index = null;
   let loadStarted = false;
 
   function loadIndex() {
     if (loadStarted) return;
     loadStarted = true;
-    fetch("/search-index.json")
+    fetch(base + "/search-index.json")
       .then((r) => r.json())
       .then((data) => { index = data; render(input.value); })
       .catch(() => {});
