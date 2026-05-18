@@ -141,25 +141,25 @@ body {
 }
 
 /* Top nav */
+/* Topbar height is fixed so every item — text of any size, button,
+   input — sits inside the same visual envelope. align-items: center
+   geometrically centres each child; line-height: 1 on text strips
+   leading so the inline box equals the font-size; sharing one
+   font-size across brand and crumbs removes the cap-height/x-height
+   perceptual drift that different sizes always produce. Hierarchy
+   between brand and crumbs is carried by weight + colour. */
 .topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--s-5);
-  padding: var(--s-3) 0;
+  height: 48px;
   margin-bottom: var(--s-6);
   border-bottom: 1px solid var(--rule);
 }
-/* Brand and crumbs use different font sizes by design. Setting
-   line-height: 1 on both shrinks each inline box down to its own
-   font-size, so align-items: center on the topbar aligns the boxes
-   on their geometric centre — which, with line-height 1, is also
-   the visual mid-line of the text. Different sizes still share the
-   same optical centre. */
 .topbar__brand,
-.topbar__crumbs { line-height: 1; }
+.topbar__crumbs { line-height: 1; font-size: var(--fs-sm); }
 .topbar__brand {
-  font-size: var(--fs-base);
   font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--fg);
