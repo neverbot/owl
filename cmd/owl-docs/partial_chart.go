@@ -45,9 +45,15 @@ func referencedFixtureList() []string {
 	return out
 }
 
-// chartPartial expands to a runtime panel div pointing at the fixture
-// JSON file. Required args: fixture (name). Optional: expr (decorative
-// label of the query), unit (display unit), title.
+// chartPartial expands to a runtime-shaped panel that mirrors what
+// the dashboard template emits in /d/<id>: an <article class="panel">
+// with an <svg class="panel__chart"> placeholder the chart engine
+// fills in. The data-static attribute tells chart.js to fetch the
+// fixture JSON beside the page instead of /api/query, and
+// data-refresh="0" disables the polling timer (fixtures are static).
+//
+// Required args: fixture (registered name in fixtures.go).
+// Optional args: expr (decorative query label), unit, title.
 func chartPartial(args map[string]string) (string, error) {
 	name := args["fixture"]
 	if name == "" {
@@ -62,16 +68,21 @@ func chartPartial(args map[string]string) (string, error) {
 		title = args["expr"]
 	}
 	unit := args["unit"]
+	unitMarkup := ""
+	if unit != "" {
+		unitMarkup = fmt.Sprintf(`<span class="panel__unit">%s</span>`, unit)
+	}
 	return fmt.Sprintf(
-		`<div class="panel" data-static="/data/%s.json" data-expr=%q data-unit=%q data-refresh="0">
-  <div class="panel__header">
-    <span class="panel__title">%s</span>
-    <span class="panel__unit">%s</span>
-  </div>
-  <div class="panel__chart"></div>
-  <div class="panel__footer">
-    <span class="panel__value">—</span>
-  </div>
-</div>`,
-		name, args["expr"], unit, title, unit), nil
+		`<article class="panel" data-static="/data/%s.json" data-expr=%q data-unit=%q data-refresh="0">
+  <header class="panel__header">
+    <h2 class="panel__title">%s</h2>
+    %s
+  </header>
+  <svg class="panel__chart" aria-label="%s chart"></svg>
+  <footer class="panel__footer">
+    <span class="panel__value panel__value--placeholder">—</span>
+    <div class="panel__legend"></div>
+  </footer>
+</article>`,
+		name, args["expr"], unit, title, unitMarkup, title), nil
 }
