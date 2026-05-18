@@ -214,21 +214,247 @@
     return Math.max(Math.round(currentWindowMs() / TARGET_POINTS), 1000);
   }
 
+  // Range cache — populated on first calendar open, kept for the
+  // page's lifetime. The server-side cache is 30 s; refetching on
+  // every popover open would be wasteful when the user pages
+  // through months. They can always reload the tab.
+  var rangeCache = null;
+  function fetchRange() {
+    if (rangeCache) return Promise.resolve(rangeCache);
+    return fetch("/api/range")
+      .then(function (r) { return r.ok ? r.json() : { min_ts: null, max_ts: null }; })
+      .then(function (body) { rangeCache = body; return body; })
+      .catch(function () { return { min_ts: null, max_ts: null }; });
+  }
+
   function repaintAll() {
     document.querySelectorAll(".panel").forEach(function (p) {
       if (p.dataset.status !== "unsupported") refreshPanel(p);
     });
   }
 
-  // renderTimeNav and bindTimeNav are filled in Task 5. Stubs here
-  // so the module loads cleanly before that task lands.
-  function renderTimeNav() { /* filled in Task 5 */ }
+  // fmtAnchor formats a historic anchor timestamp as a compact
+  // date + time string for display in the topbar chip.
+  function fmtAnchor(ms) {
+    var d = new Date(ms);
+    var date = d.toLocaleDateString(undefined, { day: "2-digit", month: "short" });
+    var time = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    return date + " · " + time;
+  }
+
+  // renderTimeNav refreshes topbar button visibility and the anchor
+  // label to reflect the current timeState (live vs historic).
+  function renderTimeNav() {
+    var root = document.querySelector("[data-time-nav]");
+    if (!root) return;
+    var prev = root.querySelector("[data-anchor-prev]");
+    var next = root.querySelector("[data-anchor-next]");
+    var now  = root.querySelector("[data-anchor-now]");
+    var label = root.querySelector("[data-anchor-label]");
+    var anchor = currentAnchor();
+    var historic = anchor !== null;
+    if (historic) root.setAttribute("data-historic", "");
+    else root.removeAttribute("data-historic");
+    if (prev)  prev.hidden  = !historic;
+    if (next)  next.hidden  = !historic;
+    if (now)   now.hidden   = !historic;
+    if (label) {
+      label.hidden = !historic;
+      label.textContent = historic ? fmtAnchor(anchor) : "";
+    }
+  }
+
+  // stepAnchor shifts the current anchor by one window-width in the
+  // given direction (+1 = forward, -1 = backward).
+  function stepAnchor(direction) {
+    var current = currentAnchor();
+    var base = current === null ? Date.now() : current;
+    setAnchor(base + direction * currentWindowMs());
+  }
+
+  // bindTimeNav wires all topbar controls: the window select, the
+  // anchor open/prev/next/now buttons, and keyboard shortcuts.
   function bindTimeNav() {
     var sel = document.querySelector("[data-range]");
-    if (!sel) return;
-    sel.value = currentWindowKey();
-    sel.addEventListener("change", function () { setWindow(sel.value); });
+    if (sel) {
+      sel.value = currentWindowKey();
+      sel.addEventListener("change", function () { setWindow(sel.value); });
+    }
+    var anchorBtn = document.querySelector("[data-anchor-open]");
+    if (anchorBtn) anchorBtn.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      openCalendar(anchorBtn);
+    });
+    var prev = document.querySelector("[data-anchor-prev]");
+    if (prev) prev.addEventListener("click", function () { stepAnchor(-1); });
+    var next = document.querySelector("[data-anchor-next]");
+    if (next) next.addEventListener("click", function () { stepAnchor(+1); });
+    var nowBtn = document.querySelector("[data-anchor-now]");
+    if (nowBtn) nowBtn.addEventListener("click", function () { setAnchor(null); });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.target && /^(input|select|textarea)$/i.test(e.target.tagName)) return;
+      if (e.key === "ArrowLeft")  { stepAnchor(-1); }
+      else if (e.key === "ArrowRight") { stepAnchor(+1); }
+      else if (e.key === "n" || e.key === "N") { setAnchor(null); }
+    });
+
+    renderTimeNav();
   }
+
+  // openCalendar mounts a one-shot popover anchored to the given
+  // element. Clicking a day projects today's HH:MM onto that day and
+  // sets the anchor. Clicking today's date clears the anchor (live).
+  function openCalendar(anchorEl) {
+    closeCalendar();
+    var pop = document.createElement("div");
+    pop.className = "time-nav__popover";
+    pop.dataset.popover = "calendar";
+
+    var anchor = currentAnchor();
+    var viewing = new Date(anchor === null ? Date.now() : anchor);
+    viewing.setDate(1);
+
+    fetchRange().then(function (range) {
+      renderCalendar(pop, viewing, range, anchorEl);
+    });
+
+    var rect = anchorEl.getBoundingClientRect();
+    pop.style.top = (window.scrollY + rect.bottom + 4) + "px";
+    pop.style.left = (window.scrollX + rect.left) + "px";
+    document.body.appendChild(pop);
+
+    setTimeout(function () {
+      document.addEventListener("click", outsideClick, true);
+      document.addEventListener("keydown", escClose, true);
+    }, 0);
+
+    function outsideClick(e) {
+      if (pop.contains(e.target)) return;
+      if (anchorEl.contains(e.target)) return;
+      closeCalendar();
+    }
+    function escClose(e) {
+      if (e.key === "Escape") closeCalendar();
+    }
+    pop._cleanup = function () {
+      document.removeEventListener("click", outsideClick, true);
+      document.removeEventListener("keydown", escClose, true);
+    };
+  }
+
+  // closeCalendar removes the calendar popover from the DOM and
+  // detaches its event listeners.
+  function closeCalendar() {
+    var existing = document.querySelector('[data-popover="calendar"]');
+    if (!existing) return;
+    if (existing._cleanup) existing._cleanup();
+    existing.remove();
+  }
+
+  // renderCalendar (re)populates the calendar popover for the given
+  // month. Called initially and on prev/next month navigation.
+  function renderCalendar(pop, viewing, range, anchorEl) {
+    clearChildren(pop);
+
+    var head = document.createElement("div");
+    head.className = "time-nav__popover-head";
+    var prevBtn = document.createElement("button");
+    prevBtn.type = "button";
+    prevBtn.textContent = "‹";
+    prevBtn.addEventListener("click", function () {
+      var v = new Date(viewing); v.setMonth(v.getMonth() - 1);
+      renderCalendar(pop, v, range, anchorEl);
+    });
+    var title = document.createElement("span");
+    title.className = "time-nav__popover-title";
+    title.textContent = viewing.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+    var nextBtn = document.createElement("button");
+    nextBtn.type = "button";
+    nextBtn.textContent = "›";
+    nextBtn.addEventListener("click", function () {
+      var v = new Date(viewing); v.setMonth(v.getMonth() + 1);
+      renderCalendar(pop, v, range, anchorEl);
+    });
+    head.appendChild(prevBtn); head.appendChild(title); head.appendChild(nextBtn);
+    pop.appendChild(head);
+
+    var grid = document.createElement("div");
+    grid.className = "time-nav__grid";
+
+    var dow = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    for (var i = 0; i < 7; i++) {
+      var h = document.createElement("div");
+      h.className = "time-nav__dow";
+      h.textContent = dow[i];
+      grid.appendChild(h);
+    }
+
+    var firstDow = (viewing.getDay() + 6) % 7; // Mon=0
+    for (var p = 0; p < firstDow; p++) {
+      grid.appendChild(document.createElement("div"));
+    }
+
+    var month = viewing.getMonth();
+    var year = viewing.getFullYear();
+    var minDate = range.min_ts !== null && range.min_ts !== undefined ? new Date(range.min_ts) : null;
+    var maxDate = range.max_ts !== null && range.max_ts !== undefined ? new Date(range.max_ts) : null;
+    var today = new Date();
+    var todayKey = isoDate(today);
+    var anchorKey = currentAnchor() !== null ? isoDate(new Date(currentAnchor())) : null;
+
+    for (var d = 1; d <= 31; d++) {
+      var dt = new Date(year, month, d);
+      if (dt.getMonth() !== month) break;
+      var cell = document.createElement("button");
+      cell.type = "button";
+      cell.className = "time-nav__day";
+      cell.textContent = String(d);
+      var key = isoDate(dt);
+      var disabled = !minDate || dt < startOfDay(minDate) || dt > endOfDay(maxDate || today);
+      if (disabled) cell.setAttribute("disabled", "");
+      if (key === todayKey) cell.setAttribute("data-today", "");
+      if (anchorKey && key === anchorKey) cell.setAttribute("data-current", "");
+      cell.addEventListener("click", (function (selected) {
+        return function () {
+          if (sameDay(selected, new Date())) {
+            setAnchor(null);
+          } else {
+            var clock = new Date();
+            var projected = new Date(
+              selected.getFullYear(), selected.getMonth(), selected.getDate(),
+              clock.getHours(), clock.getMinutes(), clock.getSeconds(), 0
+            );
+            setAnchor(projected.getTime());
+          }
+          closeCalendar();
+        };
+      })(dt));
+      grid.appendChild(cell);
+    }
+    pop.appendChild(grid);
+  }
+
+  // isoDate returns a "YYYY-MM-DD" string for a Date, used to
+  // compare calendar days without caring about time-of-day.
+  function isoDate(d) {
+    return d.getFullYear() + "-" +
+           String(d.getMonth() + 1).padStart(2, "0") + "-" +
+           String(d.getDate()).padStart(2, "0");
+  }
+
+  // startOfDay returns midnight at the start of the given Date's day.
+  function startOfDay(d) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+  }
+
+  // endOfDay returns 23:59:59.999 at the end of the given Date's day.
+  function endOfDay(d) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+  }
+
+  // sameDay returns true when two Date values fall on the same calendar day.
+  function sameDay(a, b) { return isoDate(a) === isoDate(b); }
 
   function el(name, attrs, text) {
     var node = document.createElementNS(SVG_NS, name);
