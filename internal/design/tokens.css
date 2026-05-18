@@ -150,7 +150,9 @@ body {
 .topbar__brand,
 .topbar__crumbs { line-height: var(--s-5); }
 .topbar__brand {
-  font-size: var(--fs-base);
+  /* Matched to the crumbs font-size so brand and breadcrumbs share
+     a typographic baseline; weight + colour carry the hierarchy. */
+  font-size: var(--fs-sm);
   font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--fg);
