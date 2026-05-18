@@ -150,35 +150,84 @@
   var DEFAULT_REFRESH_MS = 5000;
   var PAD = { top: 8, right: 12, bottom: 16, left: 44 };
 
-  // Range picker — the chosen window applies to every panel on this
-  // dashboard. Persisted in localStorage so it survives reloads.
-  var RANGE_KEY = "owl-range";
-  var RANGE_OPTIONS = {
+  // ────────────────────────────────────────────────────────────────────────
+  // Time state — anchor + window.
+  //
+  //   anchor: number | null
+  //     Right-edge timestamp in ms. null means live (anchor = Date.now()
+  //     evaluated per tick).
+  //   window: string
+  //     One of WINDOW_KEYS; controls the duration.
+  //
+  // anchor lives in sessionStorage so a refresh does not strand a user
+  // in the past. window lives in localStorage so the chosen zoom
+  // survives across sessions, matching the legacy picker.
+
+  var WINDOW_KEY = "owl-range";
+  var ANCHOR_KEY = "owl-anchor";
+  var WINDOW_OPTIONS = {
     "5m":  5 * 60 * 1000,
     "15m": 15 * 60 * 1000,
     "1h":  60 * 60 * 1000,
     "6h":  6 * 60 * 60 * 1000,
     "24h": 24 * 60 * 60 * 1000,
   };
-  function currentRangeKey() {
+  var TARGET_POINTS = 240;
+
+  function currentWindowKey() {
     var stored;
-    try { stored = localStorage.getItem(RANGE_KEY); } catch (e) { /* ignore */ }
-    return RANGE_OPTIONS[stored] ? stored : "5m";
+    try { stored = localStorage.getItem(WINDOW_KEY); } catch (e) { /* ignore */ }
+    return WINDOW_OPTIONS[stored] ? stored : "5m";
   }
   function currentWindowMs() {
-    return RANGE_OPTIONS[currentRangeKey()];
+    return WINDOW_OPTIONS[currentWindowKey()];
   }
-  function bindRangePicker() {
+  function setWindow(key) {
+    if (!WINDOW_OPTIONS[key]) return;
+    try { localStorage.setItem(WINDOW_KEY, key); } catch (e) { /* ignore */ }
+    repaintAll();
+  }
+
+  function currentAnchor() {
+    var raw;
+    try { raw = sessionStorage.getItem(ANCHOR_KEY); } catch (e) { /* ignore */ }
+    if (!raw) return null;
+    var n = parseInt(raw, 10);
+    return isFinite(n) ? n : null;
+  }
+  function setAnchor(ms) {
+    try {
+      if (ms === null) sessionStorage.removeItem(ANCHOR_KEY);
+      else sessionStorage.setItem(ANCHOR_KEY, String(ms));
+    } catch (e) { /* ignore */ }
+    repaintAll();
+    renderTimeNav();
+  }
+  function isLive() {
+    return currentAnchor() === null;
+  }
+  function effectiveTo() {
+    var a = currentAnchor();
+    return a === null ? Date.now() : a;
+  }
+  function effectiveStepMs() {
+    return Math.max(Math.round(currentWindowMs() / TARGET_POINTS), 1000);
+  }
+
+  function repaintAll() {
+    document.querySelectorAll(".panel").forEach(function (p) {
+      if (p.dataset.status !== "unsupported") refreshPanel(p);
+    });
+  }
+
+  // renderTimeNav and bindTimeNav are filled in Task 5. Stubs here
+  // so the module loads cleanly before that task lands.
+  function renderTimeNav() { /* filled in Task 5 */ }
+  function bindTimeNav() {
     var sel = document.querySelector("[data-range]");
     if (!sel) return;
-    sel.value = currentRangeKey();
-    sel.addEventListener("change", function () {
-      try { localStorage.setItem(RANGE_KEY, sel.value); } catch (e) { /* ignore */ }
-      // Force every panel to repaint with the new window.
-      document.querySelectorAll(".panel").forEach(function (p) {
-        if (p.dataset.status !== "unsupported") refreshPanel(p);
-      });
-    });
+    sel.value = currentWindowKey();
+    sel.addEventListener("change", function () { setWindow(sel.value); });
   }
 
   function el(name, attrs, text) {
@@ -517,10 +566,9 @@
     if (!staticSrc && !expr) return;
 
     var unit = panel.dataset.unit || "";
-    var refresh = parseInt(panel.dataset.refresh, 10) || DEFAULT_REFRESH_MS;
-    var step = Math.max(Math.floor(refresh / 2), 1000);
-    var to = Date.now();
+    var to = effectiveTo();
     var from = to - currentWindowMs();
+    var step = effectiveStepMs();
 
     // The docs site ships pre-baked fixture JSON next to each page.
     // Panels in those pages set data-static to the fixture URL and we
@@ -600,9 +648,11 @@
       var raw = panel.dataset.refresh;
       var parsed = parseInt(raw, 10);
       function tick() {
-        if (document.visibilityState !== "hidden") refreshPanel(panel);
+        if (document.visibilityState === "hidden") return;
+        if (!isLive()) return; // historic mode: data is frozen, skip the fetch
+        refreshPanel(panel);
       }
-      tick();
+      refreshPanel(panel);
       if (raw !== undefined && parsed === 0) return;
       var interval = Math.max(parsed || DEFAULT_REFRESH_MS, MIN_REFRESH_MS);
       setInterval(tick, interval);
@@ -614,7 +664,7 @@
 
   function init() {
     bindThemeToggle();
-    bindRangePicker();
+    bindTimeNav();
     schedulePanels();
   }
   if (document.readyState === "loading") {
