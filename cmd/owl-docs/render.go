@@ -11,8 +11,35 @@ import (
 
 	"html/template"
 
+	chromahtml "github.com/alecthomas/chroma/v2/formatters/html"
 	"github.com/yuin/goldmark"
+	highlighting "github.com/yuin/goldmark-highlighting/v2"
+	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/parser"
+	"github.com/yuin/goldmark/renderer/html"
 	"gopkg.in/yaml.v3"
+)
+
+// docsMarkdown is the configured goldmark instance shared by every
+// page render. It enables the GFM table extension, allows raw HTML
+// (so partial expansions like {{> chart …}} survive the rendering
+// stage), produces auto-generated anchor IDs for headings, and emits
+// chroma syntax highlighting as class names so the docs stylesheet
+// owns the colour palette.
+var docsMarkdown = goldmark.New(
+	goldmark.WithExtensions(
+		extension.Table,
+		extension.Strikethrough,
+		extension.Linkify,
+		highlighting.NewHighlighting(
+			highlighting.WithFormatOptions(
+				chromahtml.WithClasses(true),
+				chromahtml.ClassPrefix("chr-"),
+			),
+		),
+	),
+	goldmark.WithParserOptions(parser.WithAutoHeadingID()),
+	goldmark.WithRendererOptions(html.WithUnsafe()),
 )
 
 // Page is one Markdown source file with its parsed frontmatter and
@@ -109,11 +136,13 @@ func loadPages(contentRoot string) ([]*Page, error) {
 	return pages, nil
 }
 
-// renderBody converts Markdown to HTML using goldmark with default
-// extensions. Partial expansion happens *before* this call.
+// renderBody converts Markdown to HTML using docsMarkdown, which
+// is configured with GFM tables, raw-HTML pass-through (so partial
+// HTML survives), auto heading IDs and chroma syntax highlighting.
+// Partial expansion happens *before* this call.
 func renderBody(body string) (string, error) {
 	var buf bytes.Buffer
-	if err := goldmark.New().Convert([]byte(body), &buf); err != nil {
+	if err := docsMarkdown.Convert([]byte(body), &buf); err != nil {
 		return "", fmt.Errorf("goldmark: %w", err)
 	}
 	return buf.String(), nil
