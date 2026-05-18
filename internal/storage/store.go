@@ -159,6 +159,23 @@ func (s *Store) Size() (int64, error) {
 	return total, nil
 }
 
+// Range returns the smallest and largest ts in the samples table, in
+// milliseconds since epoch. ok is false when the table is empty
+// (min and max are then meaningless). The query is O(log n) thanks
+// to the ts index, so the web layer can call it on every calendar
+// open without a cache, though it caches anyway to absorb bursts.
+func (s *Store) Range() (min, max int64, ok bool, err error) {
+	var minN, maxN sql.NullInt64
+	row := s.db.QueryRow(`SELECT MIN(ts), MAX(ts) FROM samples`)
+	if err := row.Scan(&minN, &maxN); err != nil {
+		return 0, 0, false, fmt.Errorf("range: %w", err)
+	}
+	if !minN.Valid || !maxN.Valid {
+		return 0, 0, false, nil
+	}
+	return minN.Int64, maxN.Int64, true, nil
+}
+
 // parseCanonicalLabels reverses CanonicalLabels. It assumes the input was
 // produced by CanonicalLabels (so no escaping is needed).
 func parseCanonicalLabels(s string) map[string]string {

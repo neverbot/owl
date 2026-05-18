@@ -108,3 +108,44 @@ func TestStatsReportsRowCount(t *testing.T) {
 
 	_ = time.Second
 }
+
+func TestRangeEmpty(t *testing.T) {
+	s := newStore(t)
+	defer s.Close()
+
+	min, max, ok, err := s.Range()
+	if err != nil {
+		t.Fatalf("Range: %v", err)
+	}
+	if ok {
+		t.Fatalf("expected ok=false on empty store, got min=%d max=%d", min, max)
+	}
+}
+
+func TestRangeWithSamples(t *testing.T) {
+	s := newStore(t)
+	defer s.Close()
+
+	samples := []Sample{
+		{Metric: "m", Labels: map[string]string{}, TS: ms(100), Value: 1},
+		{Metric: "m", Labels: map[string]string{}, TS: ms(200), Value: 2},
+		{Metric: "m", Labels: map[string]string{}, TS: ms(150), Value: 3},
+	}
+	if err := s.Append(samples); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	min, max, ok, err := s.Range()
+	if err != nil {
+		t.Fatalf("Range: %v", err)
+	}
+	if !ok {
+		t.Fatalf("expected ok=true with samples present")
+	}
+	if min != ms(100) {
+		t.Errorf("min: got %d want %d", min, ms(100))
+	}
+	if max != ms(200) {
+		t.Errorf("max: got %d want %d", max, ms(200))
+	}
+}
