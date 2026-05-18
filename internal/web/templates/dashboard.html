@@ -17,15 +17,42 @@
         <span class="sep">/</span>
         <span class="current">{{.Title}}</span>
       </div>
-      <label class="range-picker" aria-label="Time window">
-        <select data-range>
-          <option value="5m">5 min</option>
-          <option value="15m">15 min</option>
-          <option value="1h">1 hour</option>
-          <option value="6h">6 hours</option>
-          <option value="24h">24 hours</option>
-        </select>
-      </label>
+      <div class="time-nav" data-time-nav>
+        <button class="time-nav__back" type="button" data-anchor-prev
+                aria-label="Step anchor backwards by one window" hidden>‹</button>
+
+        <button class="time-nav__anchor" type="button" data-anchor-open
+                aria-label="Open calendar">
+          <svg class="time-nav__icon" viewBox="0 0 16 16" aria-hidden="true">
+            <rect x="2" y="3.5" width="12" height="10" rx="1.5"
+                  fill="none" stroke="currentColor" stroke-width="1.25"></rect>
+            <line x1="2" y1="6.5" x2="14" y2="6.5"
+                  stroke="currentColor" stroke-width="1.25"></line>
+            <line x1="5.5" y1="2" x2="5.5" y2="5"
+                  stroke="currentColor" stroke-width="1.25"
+                  stroke-linecap="round"></line>
+            <line x1="10.5" y1="2" x2="10.5" y2="5"
+                  stroke="currentColor" stroke-width="1.25"
+                  stroke-linecap="round"></line>
+          </svg>
+          <span class="time-nav__label" data-anchor-label hidden></span>
+        </button>
+
+        <button class="time-nav__back" type="button" data-anchor-next
+                aria-label="Step anchor forwards by one window" hidden>›</button>
+
+        <button class="time-nav__now" type="button" data-anchor-now hidden>Now</button>
+
+        <label class="range-picker" aria-label="Time window">
+          <select data-range>
+            <option value="5m">5 min</option>
+            <option value="15m">15 min</option>
+            <option value="1h">1 hour</option>
+            <option value="6h">6 hours</option>
+            <option value="24h">24 hours</option>
+          </select>
+        </label>
+      </div>
       <button class="theme-toggle" data-theme-toggle aria-label="Toggle colour theme" type="button">
         <svg class="icon-sun" viewBox="0 0 16 16" aria-hidden="true">
           <circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.25"></circle>
