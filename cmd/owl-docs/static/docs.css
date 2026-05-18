@@ -187,21 +187,22 @@ mark {
 .docs__article a:hover { border-bottom-color: transparent; }
 
 /* Inline code — no box, just monospace at a slightly smaller size with
-   a faint warm-tinted background that matches the runtime's gentle
-   treatment in .page-hint and .empty. The eye picks it out by font
-   family, not by chrome. */
+   a tinted background driven by --code-bg so the tint is perceptible
+   in both light and dark themes. */
 .docs__article :not(pre) > code {
   font-family: var(--font-mono);
   font-size: 0.88em;
   color: var(--fg);
-  background: var(--bg-elevated);
+  background: var(--code-bg);
   padding: 0.05em 0.35em;
   border-radius: var(--r-sm);
 }
 
-/* Block code — full panel-style box, monospace, slightly tinted. */
+/* Block code — full panel-style box, monospace, slightly tinted.
+   Shares --code-bg with inline code so both treatments read as a
+   single family in either theme. */
 .docs__article pre {
-  background: var(--bg);
+  background: var(--code-bg);
   border: 1px solid var(--rule);
   padding: var(--s-3) var(--s-4);
   border-radius: var(--r-sm);
@@ -210,9 +211,6 @@ mark {
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
   line-height: 1.55;
-}
-:root[data-theme="dark"] .docs__article pre {
-  background: oklch(0.255 0.008 80);
 }
 .docs__article pre code {
   background: transparent;

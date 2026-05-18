@@ -45,6 +45,10 @@
 :root[data-theme="light"] {
   --bg:          oklch(0.985 0.003 80);
   --bg-elevated: oklch(1.000 0.000 80);
+  /* Inline-code background sits a perceptual step below body bg in
+     light mode (slight tint) and a clear step above body bg in dark
+     mode, where --bg-elevated alone is too close to --bg. */
+  --code-bg:     oklch(0.945 0.006 80);
   --fg:          oklch(0.20 0.008 80);
   --muted:       oklch(0.55 0.006 80);
   --subtle:      oklch(0.70 0.005 80);
@@ -75,6 +79,9 @@
 :root[data-theme="dark"] {
   --bg:          oklch(0.205 0.008 80);
   --bg-elevated: oklch(0.245 0.007 80);
+  /* Clear lift above body bg so inline code reads even on long
+     paragraphs of dark surface. */
+  --code-bg:     oklch(0.305 0.010 80);
   --fg:          oklch(0.94 0.004 80);
   --muted:       oklch(0.66 0.005 80);
   --subtle:      oklch(0.48 0.005 80);
@@ -143,16 +150,16 @@ body {
   margin-bottom: var(--s-6);
   border-bottom: 1px solid var(--rule);
 }
-/* Brand and crumbs use different font sizes; locking both to the
-   same line-height makes their flex boxes the same height, so
-   align-items: center on the topbar aligns them with each other and
-   with the right-hand controls in a single rule. */
+/* Brand and crumbs use different font sizes by design. Setting
+   line-height: 1 on both shrinks each inline box down to its own
+   font-size, so align-items: center on the topbar aligns the boxes
+   on their geometric centre — which, with line-height 1, is also
+   the visual mid-line of the text. Different sizes still share the
+   same optical centre. */
 .topbar__brand,
-.topbar__crumbs { line-height: var(--s-5); }
+.topbar__crumbs { line-height: 1; }
 .topbar__brand {
-  /* Matched to the crumbs font-size so brand and breadcrumbs share
-     a typographic baseline; weight + colour carry the hierarchy. */
-  font-size: var(--fs-sm);
+  font-size: var(--fs-base);
   font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--fg);
@@ -239,7 +246,7 @@ body {
 .page-hint code {
   font-family: var(--font-mono);
   font-size: 0.9em;
-  background: var(--bg-elevated);
+  background: var(--code-bg);
   padding: 0.05em 0.35em;
   border-radius: var(--r-sm);
   color: var(--fg);
@@ -377,7 +384,7 @@ body {
 .empty code {
   font-family: var(--font-mono);
   font-size: 0.9em;
-  background: var(--bg-elevated);
+  background: var(--code-bg);
   padding: 0.05em 0.35em;
   border-radius: var(--r-sm);
   color: var(--fg);
