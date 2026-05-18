@@ -1,6 +1,17 @@
 {{define "topbar"}}
 <nav class="topbar">
-  <a class="topbar__brand" href="{{base "/"}}">owl<span class="topbar__suffix">docs</span></a>
+  <a class="topbar__brand" href="{{base "/"}}">
+    <svg class="topbar__mark" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M7 9 L7 6 L11 9"/>
+      <path d="M25 9 L25 6 L21 9"/>
+      <circle cx="11" cy="16" r="5"/>
+      <circle cx="21" cy="16" r="5"/>
+      <circle cx="11" cy="16" r="1.4" fill="currentColor" stroke="none"/>
+      <circle cx="21" cy="16" r="1.4" fill="currentColor" stroke="none"/>
+      <path d="M16 20.5 L14.2 24 L17.8 24 Z" fill="currentColor" stroke="none"/>
+    </svg>
+    owl<span class="topbar__suffix">docs</span>
+  </a>
   <div class="topbar__crumbs">
     {{if .Section}}<span class="topbar__crumb-section">{{.Section}}</span><span class="sep">·</span>{{end}}
     <span class="current">{{.Title}}</span>

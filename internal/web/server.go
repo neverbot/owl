@@ -86,7 +86,38 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/targets", s.apiTargets)
 	s.mux.HandleFunc("/targets", s.targetsView)
 	s.mux.HandleFunc("/d/", s.dashboardView)
+	s.mux.HandleFunc("/favicon.svg", s.serveFaviconSVG)
+	s.mux.HandleFunc("/favicon-16.png", s.serveFavicon16)
+	s.mux.HandleFunc("/favicon-32.png", s.serveFavicon32)
+	s.mux.HandleFunc("/apple-touch-icon.png", s.serveAppleTouchIcon)
 	s.mux.HandleFunc("/", s.indexOrStatic)
+}
+
+// serveFaviconSVG serves the modern, theme-adaptive SVG favicon.
+// Modern browsers pick this first when offered both SVG and PNG via
+// <link rel="icon"> tags.
+func (s *Server) serveFaviconSVG(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "image/svg+xml")
+	_, _ = w.Write(design.FaviconSVG())
+}
+
+// serveFavicon16 serves the 16×16 PNG fallback for the favicon.
+func (s *Server) serveFavicon16(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "image/png")
+	_, _ = w.Write(design.Favicon16())
+}
+
+// serveFavicon32 serves the 32×32 PNG fallback for the favicon.
+func (s *Server) serveFavicon32(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "image/png")
+	_, _ = w.Write(design.Favicon32())
+}
+
+// serveAppleTouchIcon serves the 180×180 PNG used as the iOS home-screen
+// icon when the runtime UI is bookmarked there.
+func (s *Server) serveAppleTouchIcon(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "image/png")
+	_, _ = w.Write(design.Favicon180())
 }
 
 func (s *Server) indexOrStatic(w http.ResponseWriter, r *http.Request) {

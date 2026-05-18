@@ -6,11 +6,12 @@
   <title>targets — owl</title>
   <script>(function(){try{var t=localStorage.getItem('owl-theme');if(t!=='light'&&t!=='dark'){t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
   <link rel="stylesheet" href="/static/owl.css">
+  {{template "favicons"}}
 </head>
 <body>
   <div class="shell">
     <nav class="topbar">
-      <a class="topbar__brand" href="/">owl</a>
+      <a class="topbar__brand" href="/">{{template "owl-mark"}}owl</a>
       <div class="topbar__crumbs">
         <a href="/">dashboards</a>
         <span class="sep">/</span>

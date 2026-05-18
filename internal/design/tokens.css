@@ -160,10 +160,18 @@ body {
 .topbar__brand,
 .topbar__crumbs { line-height: 1; font-size: var(--fs-sm); }
 .topbar__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
   font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--fg);
   text-decoration: none;
+}
+.topbar__mark {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
 .topbar__crumbs {
   display: flex;

@@ -106,6 +106,21 @@ func run(inDir, outDir string, check bool) error {
 	if err := os.WriteFile(filepath.Join(staticDir, "search.js"), searchJS, 0o644); err != nil {
 		return fmt.Errorf("write search.js: %w", err)
 	}
+	// Favicons live at the site root (not under /static/) so the
+	// shapes browsers look up by convention (/favicon.svg,
+	// /apple-touch-icon.png, /favicon-16.png, /favicon-32.png) work
+	// even when no <link rel="icon"> tag is present, and the rest of
+	// the asset paths stay short.
+	for name, payload := range map[string][]byte{
+		"favicon.svg":          design.FaviconSVG(),
+		"favicon-16.png":       design.Favicon16(),
+		"favicon-32.png":       design.Favicon32(),
+		"apple-touch-icon.png": design.Favicon180(),
+	} {
+		if err := os.WriteFile(filepath.Join(outDir, name), payload, 0o644); err != nil {
+			return fmt.Errorf("write %s: %w", name, err)
+		}
+	}
 	if err := copyScreenshots(outDir); err != nil {
 		return fmt.Errorf("copy screenshots: %w", err)
 	}
