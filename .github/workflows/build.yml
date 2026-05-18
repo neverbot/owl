@@ -15,6 +15,14 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
+# Pages publishing needs these workflow-level permissions; they are
+# scoped down to the publish-docs job that actually uses them.
+permissions:
+  contents: read
+  packages: write
+  pages: write
+  id-token: write
+
 jobs:
   test:
     name: Test
@@ -41,14 +49,11 @@ jobs:
       - name: Docs build (smoke)
         run: make docs
 
-  publish:
+  publish-image:
     name: Build and publish container image
     needs: test
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -113,3 +118,43 @@ jobs:
       # That is intentional — operators tracking :latest who hit a
       # regression can still pin to any past digest for rollback,
       # even if no human-friendly tag points at it anymore.
+
+  publish-docs:
+    name: Build and deploy docs site
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    # Pages publishing is single-flight: only one deployment proceeds
+    # at a time, with newer pushes cancelling pending older ones.
+    concurrency:
+      group: pages
+      cancel-in-progress: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build docs with subdirectory base URL
+        # The site is served at https://neverbot.github.io/owl/ so
+        # every site-internal absolute path has to be prefixed with
+        # /owl. The generator threads --base-url through templates,
+        # the chart partial, the markdown rewriter and the search
+        # index, so a single flag is all it needs.
+        run: go run ./cmd/owl-docs --in docs/site/content --out docs/site/dist --base-url /owl
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/site/dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
