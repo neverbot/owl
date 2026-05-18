@@ -1,10 +1,6 @@
-<h1>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/ip/owl-mark-dark.svg">
-    <img src="assets/ip/owl-mark-light.svg" width="28" align="absbottom" alt="">
-  </picture>
-  owl
-</h1>
+<p><img src="assets/ip/owl-mark-accent.svg" width="128" alt="owl"></p>
+
+# owl
 
 Tiny, lightweight self-hosted observability. One static Go binary, one
 container, one SQLite file. Built for a single low-end host where
