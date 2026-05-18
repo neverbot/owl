@@ -284,6 +284,8 @@ body {
   white-space: nowrap;
 }
 
+.time-nav [hidden] { display: none; }
+
 .time-nav[data-historic] .time-nav__anchor {
   border: 1px solid var(--accent);
   color: var(--fg);
