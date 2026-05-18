@@ -172,6 +172,13 @@ body {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
+  /* Optical correction. The mark's visible content (ears + eyes +
+     beak) is top-heavy: ears push the perceived centre of mass above
+     the SVG box centre. Flex centering puts the box centre at the
+     bar mid, which leaves the eyes reading slightly high next to the
+     wordmark's x-height. A small downward nudge re-balances the
+     mark so the eyes sit on the same optical line as the text. */
+  transform: translateY(1.5px);
 }
 .topbar__crumbs {
   display: flex;
