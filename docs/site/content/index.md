@@ -3,6 +3,8 @@ title: Home
 nav_order: 0
 ---
 
+<p align="center"><img src="/assets/owl-mark-accent.svg" width="64" alt="owl"></p>
+
 owl is a tiny self-hosted observability tool. One static Go binary,
 one container, one SQLite file. Built for a single low-end host where
 Prometheus + Grafana is too heavy and a SaaS funnel is the wrong

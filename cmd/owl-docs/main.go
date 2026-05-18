@@ -121,11 +121,47 @@ func run(inDir, outDir string, check bool) error {
 			return fmt.Errorf("write %s: %w", name, err)
 		}
 	}
+	if err := copyAssetsIP(outDir); err != nil {
+		return fmt.Errorf("copy assets/ip: %w", err)
+	}
 	if err := copyScreenshots(outDir); err != nil {
 		return fmt.Errorf("copy screenshots: %w", err)
 	}
 	if err := renderAll(inDir, outDir); err != nil {
 		return fmt.Errorf("render: %w", err)
+	}
+	return nil
+}
+
+// copyAssetsIP mirrors assets/ip/*.svg into dist/assets/ so pages can
+// reference brand variants of the owl mark (light, dark, accent) as
+// /assets/owl-mark-*.svg. PNGs and the readme are skipped — the
+// docs site only needs the SVG variants. Missing source directory is
+// not an error.
+func copyAssetsIP(outDir string) error {
+	const src = "assets/ip"
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	dst := filepath.Join(outDir, "assets")
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".svg") {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(src, e.Name()))
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(dst, e.Name()), b, 0o644); err != nil {
+			return err
+		}
 	}
 	return nil
 }
