@@ -1,6 +1,16 @@
 /* Layout-specific styles for the docs site. Uses tokens from
    /static/owl.css; only adds rules for selectors the runtime UI
-   doesn't have (.docs__*, .topbar__suffix, .search__*). */
+   doesn't have (.docs__*, .topbar__suffix, .search__*, .chr-*). */
+
+/* ─────────────────────────────────────────────────────────────────
+   Shell containers
+   ───────────────────────────────────────────────────────────────── */
+
+.docs-shell {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 var(--s-5);
+}
 
 .docs {
   display: grid;
@@ -8,65 +18,287 @@
   gap: var(--s-6);
   max-width: 1100px;
   margin: 0 auto;
-  padding: var(--s-5) var(--s-5) var(--s-7);
+  padding: var(--s-2) var(--s-5) var(--s-7);
 }
 
-.docs__nav { position: sticky; top: var(--s-5); align-self: start; }
+.docs__main { min-width: 0; }
+
+/* ─────────────────────────────────────────────────────────────────
+   Topbar additions (rest comes from tokens.css)
+   ───────────────────────────────────────────────────────────────── */
+
+.topbar__suffix {
+  color: var(--muted);
+  margin-left: 0.3em;
+  font-weight: 400;
+}
+
+.topbar__crumb-section { color: var(--muted); }
+
+/* Search input + dropdown */
+.search { position: relative; flex: 0 1 280px; min-width: 0; }
+.search input[type=search] {
+  width: 100%;
+  padding: 4px 8px;
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sm);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  transition: border-color var(--t-fast) var(--ease-out);
+}
+.search input[type=search]:hover { border-color: var(--muted); }
+.search input[type=search]:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-color: var(--muted);
+}
+.search__results {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: var(--bg-elevated);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sm);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.10);
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: var(--s-2);
+}
+.search__result {
+  display: block;
+  padding: var(--s-2) var(--s-3);
+  text-decoration: none;
+  color: var(--fg);
+  border-radius: var(--r-sm);
+}
+.search__result:hover { background: var(--bg); }
+.search__crumb { font-size: var(--fs-xs); color: var(--muted); }
+.search__crumb strong { color: var(--fg); font-weight: 500; }
+.search__snippet {
+  font-size: var(--fs-sm);
+  color: var(--muted);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+.search__empty {
+  padding: var(--s-2) var(--s-3);
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+mark {
+  background: oklch(0.95 0.06 0);
+  color: var(--fg);
+  padding: 0 0.15em;
+  border-radius: 2px;
+}
+:root[data-theme="dark"] mark {
+  background: oklch(0.38 0.10 0);
+  color: var(--fg);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Side nav
+   ───────────────────────────────────────────────────────────────── */
+
+.docs__nav {
+  position: sticky;
+  top: var(--s-5);
+  align-self: start;
+  padding-top: var(--s-2);
+}
 .docs__nav-section + .docs__nav-section { margin-top: var(--s-5); }
 .docs__nav-heading {
-  font-size: var(--fs-xs); text-transform: uppercase;
-  letter-spacing: 0.06em; color: var(--muted); margin: 0 0 var(--s-2);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 0 0 var(--s-2);
+  font-weight: 500;
 }
 .docs__nav-list { list-style: none; padding: 0; margin: 0; }
 .docs__nav-link {
-  display: block; padding: var(--s-1) 0; color: var(--fg);
-  text-decoration: none; font-size: var(--fs-sm);
+  display: block;
+  padding: 4px 0;
+  color: var(--fg);
+  text-decoration: none;
+  font-size: var(--fs-sm);
+  transition: color var(--t-fast) var(--ease-out);
 }
 .docs__nav-link:hover { color: var(--accent); }
 .docs__nav-link--current { color: var(--accent); font-weight: 500; }
 
-.docs__article { max-width: 70ch; }
-.docs__article h1 { font-size: var(--fs-xl); margin-top: 0; }
-.docs__article h2 { font-size: var(--fs-lg); margin-top: var(--s-6); }
-.docs__article h3 { font-size: var(--fs-md); margin-top: var(--s-5); }
-.docs__article p, .docs__article li { line-height: 1.6; }
+/* ─────────────────────────────────────────────────────────────────
+   Article — typography, code, tables, links
+   ───────────────────────────────────────────────────────────────── */
+
+.docs__article { max-width: 72ch; padding-top: var(--s-2); }
+
+.docs__article h1 {
+  font-size: var(--fs-xl);
+  margin: 0 0 var(--s-4);
+  letter-spacing: -0.012em;
+  font-weight: 500;
+}
+.docs__article h2 {
+  font-size: var(--fs-lg);
+  margin: var(--s-6) 0 var(--s-3);
+  letter-spacing: -0.008em;
+  font-weight: 500;
+}
+.docs__article h3 {
+  font-size: var(--fs-md);
+  margin: var(--s-5) 0 var(--s-2);
+  font-weight: 500;
+}
+.docs__article p { margin: var(--s-3) 0; line-height: 1.65; }
+.docs__article ul, .docs__article ol { margin: var(--s-3) 0; padding-left: var(--s-5); }
+.docs__article li { line-height: 1.65; margin: 0.15em 0; }
+.docs__article hr { border: 0; border-top: 1px solid var(--rule); margin: var(--s-5) 0; }
+
+.docs__article a {
+  color: var(--fg);
+  text-decoration: none;
+  border-bottom: 1px solid var(--rule);
+  transition: border-color var(--t-fast) var(--ease-out);
+}
+.docs__article a:hover { border-bottom-color: transparent; }
+
+/* Inline code — no box, just monospace at a slightly smaller size with
+   a faint warm-tinted background that matches the runtime's gentle
+   treatment in .page-hint and .empty. The eye picks it out by font
+   family, not by chrome. */
+.docs__article :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  color: var(--fg);
+  background: var(--bg-elevated);
+  padding: 0.05em 0.35em;
+  border-radius: var(--r-sm);
+}
+
+/* Block code — full panel-style box, monospace, slightly tinted. */
 .docs__article pre {
-  background: var(--bg); border: 1px solid var(--rule);
-  padding: var(--s-3); border-radius: 4px; overflow-x: auto;
-  font-family: var(--font-mono); font-size: var(--fs-sm);
-}
-.docs__article code { font-family: var(--font-mono); font-size: 0.92em; }
-.docs__article table {
-  width: 100%; border-collapse: collapse; margin: var(--s-4) 0;
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-sm);
+  overflow-x: auto;
+  margin: var(--s-4) 0;
+  font-family: var(--font-mono);
   font-size: var(--fs-sm);
+  line-height: 1.55;
 }
-.docs__article th, .docs__article td {
-  padding: var(--s-2) var(--s-3); border-bottom: 1px solid var(--rule);
+:root[data-theme="dark"] .docs__article pre {
+  background: oklch(0.255 0.008 80);
+}
+.docs__article pre code {
+  background: transparent;
+  padding: 0;
+  border: 0;
+  font-size: inherit;
+}
+
+/* GFM tables */
+.docs__article table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--s-4) 0;
+  font-size: var(--fs-sm);
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+.docs__article thead th {
   text-align: left;
+  font-weight: 500;
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--rule);
+}
+.docs__article tbody td {
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+.docs__article tbody tr:last-child td { border-bottom: 0; }
+
+/* Blockquote (rare but used for pull-quote-style notes) */
+.docs__article blockquote {
+  margin: var(--s-4) 0;
+  padding: 0 var(--s-4);
+  color: var(--muted);
+  border-left: 2px solid var(--rule);
 }
 
-.topbar__suffix { color: var(--muted); margin-left: 0.2em; font-weight: 400; }
-.search { position: relative; flex: 0 1 300px; }
-.search input[type=search] {
-  width: 100%; padding: var(--s-2) var(--s-3);
-  background: var(--bg); color: var(--fg);
-  border: 1px solid var(--rule); border-radius: 4px;
-  font-family: var(--font-sans); font-size: var(--fs-sm);
-}
-.search__results {
-  position: absolute; top: calc(100% + 4px); left: 0; right: 0;
-  background: var(--bg-elevated); border: 1px solid var(--rule);
-  border-radius: 4px; box-shadow: 0 4px 14px rgba(0,0,0,0.08);
-  max-height: 60vh; overflow-y: auto; padding: var(--s-2);
+/* Chart panels embedded in pages — keep them inside the column,
+   give them breathing room from surrounding text. Title styling
+   inherits from tokens.css so docs charts match runtime dashboards. */
+.docs__article .panel {
+  margin: var(--s-5) 0;
 }
 
-.search__result {
-  display: block; padding: var(--s-2) var(--s-3); text-decoration: none;
-  color: var(--fg); border-radius: 3px;
+/* ─────────────────────────────────────────────────────────────────
+   Syntax highlighting — chroma classes, restrained palette built
+   from OKLCH tokens so it sits inside owl's design system.
+   ───────────────────────────────────────────────────────────────── */
+
+.chr-k,  .chr-kd, .chr-kn, .chr-kp, .chr-kr, .chr-kt { color: oklch(0.45 0.10 280); }            /* keyword */
+.chr-na, .chr-nb, .chr-nc, .chr-nd, .chr-nf, .chr-ni { color: oklch(0.42 0.10 230); }            /* names */
+.chr-nt { color: oklch(0.42 0.10 230); }                                                          /* tag name */
+.chr-s,  .chr-s1, .chr-s2, .chr-sb, .chr-sc, .chr-sd, .chr-se, .chr-sh, .chr-si, .chr-sx, .chr-sr, .chr-ss { color: oklch(0.45 0.10 140); } /* strings */
+.chr-m,  .chr-mb, .chr-mf, .chr-mh, .chr-mi, .chr-mo { color: oklch(0.48 0.10 60);  }            /* numbers */
+.chr-c,  .chr-c1, .chr-cm, .chr-cp, .chr-cs { color: var(--subtle); font-style: italic; }         /* comments */
+.chr-o,  .chr-ow { color: var(--muted); }                                                          /* operators */
+.chr-p { color: var(--fg); }                                                                       /* punctuation */
+.chr-err { color: oklch(0.50 0.20 25); }                                                           /* errors */
+
+:root[data-theme="dark"] .chr-k,
+:root[data-theme="dark"] .chr-kd,
+:root[data-theme="dark"] .chr-kn,
+:root[data-theme="dark"] .chr-kp,
+:root[data-theme="dark"] .chr-kr,
+:root[data-theme="dark"] .chr-kt { color: oklch(0.78 0.10 280); }
+:root[data-theme="dark"] .chr-na,
+:root[data-theme="dark"] .chr-nb,
+:root[data-theme="dark"] .chr-nc,
+:root[data-theme="dark"] .chr-nd,
+:root[data-theme="dark"] .chr-nf,
+:root[data-theme="dark"] .chr-ni,
+:root[data-theme="dark"] .chr-nt { color: oklch(0.78 0.10 230); }
+:root[data-theme="dark"] .chr-s,
+:root[data-theme="dark"] .chr-s1,
+:root[data-theme="dark"] .chr-s2,
+:root[data-theme="dark"] .chr-sb,
+:root[data-theme="dark"] .chr-sc,
+:root[data-theme="dark"] .chr-sd,
+:root[data-theme="dark"] .chr-se,
+:root[data-theme="dark"] .chr-sh,
+:root[data-theme="dark"] .chr-si,
+:root[data-theme="dark"] .chr-sx,
+:root[data-theme="dark"] .chr-sr,
+:root[data-theme="dark"] .chr-ss { color: oklch(0.78 0.10 140); }
+:root[data-theme="dark"] .chr-m,
+:root[data-theme="dark"] .chr-mb,
+:root[data-theme="dark"] .chr-mf,
+:root[data-theme="dark"] .chr-mh,
+:root[data-theme="dark"] .chr-mi,
+:root[data-theme="dark"] .chr-mo { color: oklch(0.80 0.10 60); }
+
+/* ─────────────────────────────────────────────────────────────────
+   Mobile
+   ───────────────────────────────────────────────────────────────── */
+
+@media (max-width: 760px) {
+  .docs {
+    grid-template-columns: 1fr;
+    gap: var(--s-4);
+  }
+  .docs__nav { position: static; }
+  .search { flex-basis: 160px; }
 }
-.search__result:hover { background: var(--bg); }
-.search__crumb { font-size: var(--fs-sm); color: var(--muted); }
-.search__crumb strong { color: var(--fg); font-weight: 500; }
-.search__snippet { font-size: var(--fs-sm); color: var(--muted); margin-top: 2px; }
-.search__empty { padding: var(--s-2) var(--s-3); color: var(--muted); font-size: var(--fs-sm); }
-mark { background: var(--accent); color: var(--bg); padding: 0 0.15em; border-radius: 2px; }
