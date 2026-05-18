@@ -6,6 +6,8 @@ Prometheus + Grafana is too heavy and a SaaS funnel is the wrong shape.
 
 **Full documentation: [neverbot.github.io/owl](https://neverbot.github.io/owl/).**
 
+<p align="center"><img src="docs/screenshots/dashboard-host.png" alt="Host dashboard" width="600"></p>
+
 ## What it does today
 
 - Scrapes Prometheus-format `/metrics` endpoints on an interval,
@@ -59,6 +61,14 @@ Prometheus + Grafana is too heavy and a SaaS funnel is the wrong shape.
 - Structured logging through `log/slog` at the level configured by
   `log_level` (info / debug / warn / error). Graceful shutdown that
   waits for every collector and worker to drain before exiting.
+
+## Screenshots
+
+The bundled dashboards on a small production deployment:
+
+<p align="center"><img src="docs/screenshots/dashboard-health.png" alt="Owl Health dashboard" width="600"></p>
+
+<p align="center"><img src="docs/screenshots/dashboard-containers.png" alt="Containers dashboard" width="600"></p>
 
 ## Try it from a clone
 

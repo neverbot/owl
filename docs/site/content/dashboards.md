@@ -10,6 +10,19 @@ format is a deliberate subset of Grafana's dashboard JSON, so a
 Grafana export can usually be dropped in and rendered with a
 best-effort result. Unknown fields are ignored silently.
 
+## Bundled dashboards
+
+owl ships three dashboards under `dashboards/` in the repo:
+**Owl Health** (self-monitoring from `/metrics`), **Host** (Linux host
+metrics, opt-in via `host.enabled`) and **Containers** (per-container
+metrics from the Docker integration).
+
+![Owl Health dashboard](/screenshots/dashboard-health.png)
+
+![Host dashboard](/screenshots/dashboard-host.png)
+
+![Containers dashboard](/screenshots/dashboard-containers.png)
+
 ## Panel shape
 
 One panel looks like this:

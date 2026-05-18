@@ -106,8 +106,43 @@ func run(inDir, outDir string, check bool) error {
 	if err := os.WriteFile(filepath.Join(staticDir, "search.js"), searchJS, 0o644); err != nil {
 		return fmt.Errorf("write search.js: %w", err)
 	}
+	if err := copyScreenshots(outDir); err != nil {
+		return fmt.Errorf("copy screenshots: %w", err)
+	}
 	if err := renderAll(inDir, outDir); err != nil {
 		return fmt.Errorf("render: %w", err)
+	}
+	return nil
+}
+
+// copyScreenshots mirrors docs/screenshots/* into dist/screenshots/
+// so pages can reference them as /screenshots/<name>.png (which then
+// gets the base-URL prefix at render time). Missing source directory
+// is not an error — the readme uses them, but docs pages may not.
+func copyScreenshots(outDir string) error {
+	const src = "docs/screenshots"
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	dst := filepath.Join(outDir, "screenshots")
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(src, e.Name()))
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(dst, e.Name()), b, 0o644); err != nil {
+			return err
+		}
 	}
 	return nil
 }

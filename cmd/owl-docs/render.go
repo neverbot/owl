@@ -152,22 +152,24 @@ func renderBody(body string) (string, error) {
 	return rewriteInternalHrefs(buf.String()), nil
 }
 
-// internalHrefRE matches href="/path" attributes whose path starts
-// with a single slash followed by a letter, digit or "#" — i.e. a
-// site-internal absolute URL. Protocol-relative ("//cdn") and full
-// URLs ("https://…") are skipped because they don't begin with "/x".
-var internalHrefRE = regexp.MustCompile(`href="(/[A-Za-z0-9#][^"]*)"`)
+// internalAttrRE matches href="/path" or src="/path" attributes whose
+// path starts with a single slash followed by a letter, digit or "#"
+// — i.e. a site-internal absolute URL. Protocol-relative ("//cdn")
+// and full URLs ("https://…") are skipped because they don't begin
+// with "/x".
+var internalAttrRE = regexp.MustCompile(`(href|src)="(/[A-Za-z0-9#][^"]*)"`)
 
-// rewriteInternalHrefs prefixes every internal absolute href in the
-// rendered HTML with the configured base URL. No-op when baseURL is
-// empty.
+// rewriteInternalHrefs prefixes every internal absolute href and src
+// in the rendered HTML with the configured base URL. No-op when
+// baseURL is empty. Both attributes are handled so markdown images
+// (rendered as <img src=…>) get the same prefix treatment as links.
 func rewriteInternalHrefs(s string) string {
 	if baseURL == "" {
 		return s
 	}
-	return internalHrefRE.ReplaceAllStringFunc(s, func(match string) string {
-		groups := internalHrefRE.FindStringSubmatch(match)
-		return `href="` + withBase(groups[1]) + `"`
+	return internalAttrRE.ReplaceAllStringFunc(s, func(match string) string {
+		g := internalAttrRE.FindStringSubmatch(match)
+		return g[1] + `="` + withBase(g[2]) + `"`
 	})
 }
 

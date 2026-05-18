@@ -24,6 +24,8 @@ goroutines, heap, GC pauses, storage size and alerter counters. Owl
 scrapes its own `/metrics` endpoint on startup, so panels populate
 within one scrape interval.
 
+![Owl Health dashboard](/screenshots/dashboard-health.png)
+
 `docker compose up --build` rebuilds the image from your local
 checkout — useful when hacking on the Go code. `docker compose down
 -v` removes the named data volume for a clean slate.

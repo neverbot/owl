@@ -135,7 +135,21 @@ mark {
    Article — typography, code, tables, links
    ───────────────────────────────────────────────────────────────── */
 
-.docs__article { max-width: 72ch; padding-top: var(--s-2); }
+/* The article is wide enough that screenshots and panels can sit
+   centred with breathing room on either side. Prose-bearing elements
+   below re-constrain themselves to a comfortable reading measure;
+   image-only paragraphs opt out via :has() so they can centre across
+   the full column. */
+.docs__article { padding-top: var(--s-2); }
+.docs__article > p,
+.docs__article > ul,
+.docs__article > ol,
+.docs__article > h1,
+.docs__article > h2,
+.docs__article > h3,
+.docs__article > h4,
+.docs__article > blockquote { max-width: 72ch; }
+.docs__article > p:has(> img:only-child) { max-width: none; text-align: center; }
 
 .docs__article h1 {
   font-size: var(--fs-xl);
@@ -260,6 +274,15 @@ mark {
   font-size: var(--fs-lg);
   color: var(--fg);
   letter-spacing: -0.01em;
+}
+
+/* Screenshot images sit centred in the article column with the same
+   vertical rhythm as panels, constrained to the column width. */
+.docs__article img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: var(--s-5) auto;
 }
 
 /* ─────────────────────────────────────────────────────────────────
