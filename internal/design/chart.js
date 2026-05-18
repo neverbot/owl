@@ -541,7 +541,12 @@
         var legendTemplate = panel.dataset.legend || "";
 
         var svg = panel.querySelector(".panel__chart");
-        if (svg) renderChart(svg, seriesList, unit, legendTemplate, { from: from, to: to });
+        // For static fixtures the on-disk timestamps live in the past;
+        // letting renderChart auto-fit the X domain from the data
+        // keeps the points inside the visible area. Live panels pass
+        // the picker's window so the axis reads "-Nh … now".
+        var dom = staticSrc ? null : { from: from, to: to };
+        if (svg) renderChart(svg, seriesList, unit, legendTemplate, dom);
 
         var legend = panel.querySelector(".panel__legend");
         if (legend) renderLegend(legend, seriesList, legendTemplate);
