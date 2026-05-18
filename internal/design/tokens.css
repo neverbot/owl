@@ -136,21 +136,19 @@ body {
 /* Top nav */
 .topbar {
   display: flex;
-  /* Baseline keeps the brand and crumbs text aligned along their
-     typographic baseline even though they use different font sizes;
-     align-items: center matches box centres, which makes mixed-size
-     text look one or two pixels offset. Non-text items (theme toggle,
-     range picker, search input) opt out via align-self: center. */
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: var(--s-5);
   padding: var(--s-3) 0;
   margin-bottom: var(--s-6);
   border-bottom: 1px solid var(--rule);
 }
-.topbar .theme-toggle,
-.topbar .range-picker,
-.topbar .search { align-self: center; }
+/* Brand and crumbs use different font sizes; locking both to the
+   same line-height makes their flex boxes the same height, so
+   align-items: center on the topbar aligns them with each other and
+   with the right-hand controls in a single rule. */
+.topbar__brand,
+.topbar__crumbs { line-height: var(--s-5); }
 .topbar__brand {
   font-size: var(--fs-base);
   font-weight: 500;
