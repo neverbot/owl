@@ -4,6 +4,8 @@ Tiny, lightweight self-hosted observability. One static Go binary, one
 container, one SQLite file. Built for a single low-end host where
 Prometheus + Grafana is too heavy and a SaaS funnel is the wrong shape.
 
+**Full documentation: [neverbot.github.io/owl](https://neverbot.github.io/owl/).**
+
 ## What it does today
 
 - Scrapes Prometheus-format `/metrics` endpoints on an interval,
