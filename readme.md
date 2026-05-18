@@ -1,4 +1,6 @@
-<p><img src="assets/ip/owl-mark-accent.svg" width="128" alt="owl"></p>
+<p align="center">
+  <img src="assets/ip/owl-mark-accent.svg" width="128" alt="owl">
+</p>
 
 # owl
 
