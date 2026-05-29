@@ -88,11 +88,23 @@ func TestHealthSnapshotRecordsScrapeOutcome(t *testing.T) {
 		{Name: "ok", URL: srv.URL, Interval: 20 * time.Millisecond, Timeout: 200 * time.Millisecond},
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	mgr.Run(ctx)
+	done := make(chan struct{})
+	go func() { mgr.Run(ctx); close(done) }()
 
-	h := mgr.HealthSnapshot()
+	deadline := time.Now().Add(2 * time.Second)
+	var h []TargetHealth
+	for time.Now().Before(deadline) {
+		h = mgr.HealthSnapshot()
+		if len(h) == 1 && h[0].LastError == "" && h[0].LastSamples == 2 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	<-done
+
 	if len(h) != 1 {
 		t.Fatalf("len(health) = %d, want 1", len(h))
 	}
