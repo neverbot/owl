@@ -31,6 +31,33 @@ func TestBuildSearchIndexCoversHeadings(t *testing.T) {
 	}
 }
 
+func TestBuildSearchIndexCoversWholeSection(t *testing.T) {
+	body := "intro.\n\n## Socket permissions\n\nFirst paragraph here.\n\nThe bundled `compose.yml` uses `group_add: [\"0\"]`.\n\n```yaml\nservices:\n  owl:\n    group_add: [\"999\"]\n```\n\n## Next\n\nunrelated.\n"
+	p := &Page{
+		SourcePath:  "docker.md",
+		URL:         "/operating/docker/",
+		Frontmatter: Frontmatter{Title: "Docker", Section: "Operating"},
+		Body:        body,
+	}
+	idx := buildSearchIndex([]*Page{p}, map[string]string{"docker.md": body})
+	var socket *SearchRecord
+	for i := range idx {
+		if strings.HasSuffix(idx[i].URL, "#socket-permissions") {
+			socket = &idx[i]
+			break
+		}
+	}
+	if socket == nil {
+		t.Fatalf("missing socket-permissions entry: %+v", idx)
+	}
+	if !strings.Contains(socket.Terms, "group add") {
+		t.Errorf("terms missing group_add tokens (second paragraph + code block): %q", socket.Terms)
+	}
+	if strings.Contains(socket.Terms, "unrelated") {
+		t.Errorf("terms bled into next section: %q", socket.Terms)
+	}
+}
+
 func TestWriteSearchIndexIsValidJSON(t *testing.T) {
 	out := t.TempDir()
 	recs := []SearchRecord{{URL: "/x/", Title: "x", Terms: "x"}}

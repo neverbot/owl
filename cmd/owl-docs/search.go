@@ -63,12 +63,13 @@ func extractSearchEntries(p *Page, body string) []SearchRecord {
 		title := plainText(h, src)
 		anchor := slugify(title)
 		snippet := paragraphAfter(h, src)
+		section := sectionAfter(h, src)
 		out = append(out, SearchRecord{
 			URL:        withBase(p.URL) + "#" + anchor,
 			Title:      title,
 			Breadcrumb: p.Frontmatter.Section + " · " + p.Frontmatter.Title,
 			Snippet:    snippet,
-			Terms:      tokenise(title + " " + snippet),
+			Terms:      tokenise(title + " " + section),
 		})
 		return ast.WalkContinue, nil
 	})
@@ -104,6 +105,57 @@ func paragraphAfter(h ast.Node, src []byte) string {
 		}
 	}
 	return ""
+}
+
+// sectionAfter returns the concatenated text of every block following h
+// up to the next heading. It walks paragraphs, lists, blockquotes and
+// code blocks so search matches terms that only appear deeper in a
+// section (for example, an identifier mentioned in the second paragraph
+// or inside a YAML example).
+func sectionAfter(h ast.Node, src []byte) string {
+	var b bytes.Buffer
+	for n := h.NextSibling(); n != nil; n = n.NextSibling() {
+		if _, ok := n.(*ast.Heading); ok {
+			break
+		}
+		writeBlockText(&b, n, src)
+		b.WriteByte(' ')
+	}
+	return b.String()
+}
+
+// writeBlockText appends the readable text of one block node to b.
+// Paragraphs, lists and blockquotes contribute their text descendants;
+// fenced and indented code blocks contribute their raw source lines so
+// identifiers inside examples remain searchable.
+func writeBlockText(b *bytes.Buffer, n ast.Node, src []byte) {
+	switch v := n.(type) {
+	case *ast.FencedCodeBlock:
+		writeLines(b, v.Lines(), src)
+	case *ast.CodeBlock:
+		writeLines(b, v.Lines(), src)
+	default:
+		_ = ast.Walk(n, func(c ast.Node, entering bool) (ast.WalkStatus, error) {
+			if !entering {
+				return ast.WalkContinue, nil
+			}
+			if t, ok := c.(*ast.Text); ok {
+				b.Write(t.Segment.Value(src))
+				b.WriteByte(' ')
+			}
+			return ast.WalkContinue, nil
+		})
+	}
+}
+
+// writeLines appends each source-backed line in segs to b followed by a
+// space, used to render code-block contents as searchable text.
+func writeLines(b *bytes.Buffer, segs *text.Segments, src []byte) {
+	for i := 0; i < segs.Len(); i++ {
+		seg := segs.At(i)
+		b.Write(seg.Value(src))
+		b.WriteByte(' ')
+	}
 }
 
 // slugify lowercases s and collapses runs of non-alphanumerics into a
