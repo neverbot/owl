@@ -14,12 +14,16 @@ import (
 )
 
 // SearchRecord is one searchable entry: a page, or one of its h2/h3
-// headings. Terms is pre-tokenised lowercase text used for matching.
+// headings. Terms is pre-tokenised lowercase text used for matching;
+// Body is the full readable section text used by the client to build
+// a context-aware snippet when the match lies outside the first
+// paragraph.
 type SearchRecord struct {
 	URL        string `json:"url"`
 	Title      string `json:"title"`
 	Breadcrumb string `json:"breadcrumb"`
 	Snippet    string `json:"snippet"`
+	Body       string `json:"body"`
 	Terms      string `json:"terms"`
 }
 
@@ -48,8 +52,9 @@ func extractSearchEntries(p *Page, body string) []SearchRecord {
 		Title:      p.Frontmatter.Title,
 		Breadcrumb: p.Frontmatter.Section,
 		Snippet:    firstParagraphText(doc, src),
+		Body:       firstParagraphText(doc, src),
 	}
-	page.Terms = tokenise(page.Title + " " + page.Snippet)
+	page.Terms = tokenise(page.Title + " " + page.Body)
 	out := []SearchRecord{page}
 
 	ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
@@ -63,12 +68,13 @@ func extractSearchEntries(p *Page, body string) []SearchRecord {
 		title := plainText(h, src)
 		anchor := slugify(title)
 		snippet := paragraphAfter(h, src)
-		section := sectionAfter(h, src)
+		section := collapseWhitespace(sectionAfter(h, src))
 		out = append(out, SearchRecord{
 			URL:        withBase(p.URL) + "#" + anchor,
 			Title:      title,
 			Breadcrumb: p.Frontmatter.Section + " · " + p.Frontmatter.Title,
 			Snippet:    snippet,
+			Body:       section,
 			Terms:      tokenise(title + " " + section),
 		})
 		return ast.WalkContinue, nil
@@ -176,6 +182,13 @@ func slugify(s string) string {
 		}
 	}
 	return strings.Trim(b.String(), "-")
+}
+
+// collapseWhitespace replaces runs of whitespace with a single space
+// and trims the result, producing compact body text for the client to
+// excerpt around a match.
+func collapseWhitespace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // tokenise lowercases s, replaces non-alphanumerics with spaces, and

@@ -56,6 +56,12 @@ func TestBuildSearchIndexCoversWholeSection(t *testing.T) {
 	if strings.Contains(socket.Terms, "unrelated") {
 		t.Errorf("terms bled into next section: %q", socket.Terms)
 	}
+	if !strings.Contains(socket.Body, "group_add") {
+		t.Errorf("body should keep verbatim group_add for client-side excerpt: %q", socket.Body)
+	}
+	if strings.Contains(socket.Body, "unrelated") {
+		t.Errorf("body bled into next section: %q", socket.Body)
+	}
 }
 
 func TestWriteSearchIndexIsValidJSON(t *testing.T) {

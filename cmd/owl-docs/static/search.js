@@ -37,14 +37,67 @@
     return score;
   }
 
-  function highlight(snippet, tokens) {
+  function escRegex(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function excerpt(text, hit) {
+    const window = 180;
+    const start = Math.max(0, hit - Math.floor(window / 3));
+    const end = Math.min(text.length, start + window);
+    let out = text.slice(start, end);
+    if (start > 0) out = "… " + out;
+    if (end < text.length) out = out + " …";
+    return out;
+  }
+
+  // Prefer the verbatim query: if the snippet doesn't contain it but
+  // the body does, slice an excerpt around the body hit. Falls back to
+  // the first-paragraph snippet when the verbatim query is absent, so
+  // pure-token matches keep showing their familiar opening sentence.
+  function pickSnippet(record, query, tokens) {
+    const snippet = record.snippet || "";
+    const body = record.body || "";
+    const q = query.trim().toLowerCase();
+    if (q) {
+      if (snippet.toLowerCase().includes(q)) return snippet;
+      const i = body.toLowerCase().indexOf(q);
+      if (i !== -1) return excerpt(body, i);
+    }
+    const snippetL = snippet.toLowerCase();
+    if (tokens.every((t) => snippetL.includes(t))) return snippet;
+    if (!body) return snippet;
+    const bodyL = body.toLowerCase();
+    let hit = -1;
+    for (const t of tokens) {
+      const i = bodyL.indexOf(t);
+      if (i !== -1 && (hit === -1 || i < hit)) hit = i;
+    }
+    if (hit === -1) return snippet;
+    return excerpt(body, hit);
+  }
+
+  function highlight(snippet, query, tokens) {
     if (!snippet) return "";
     let escaped = snippet
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
-    for (const t of tokens) {
-      const re = new RegExp("(" + t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "ig");
+    const marks = [];
+    const q = query.trim();
+    if (q) marks.push(q);
+    for (const t of tokens) marks.push(t);
+    marks.sort((a, b) => b.length - a.length);
+    const escapedL = escaped.toLowerCase();
+    const kept = [];
+    for (const m of marks) {
+      const mL = m.toLowerCase();
+      if (!escapedL.includes(mL)) continue;
+      if (kept.some((k) => k.toLowerCase().includes(mL))) continue;
+      kept.push(m);
+    }
+    for (const m of kept) {
+      const re = new RegExp("(" + escRegex(m) + ")", "ig");
       escaped = escaped.replace(re, "<mark>$1</mark>");
     }
     return escaped;
@@ -71,12 +124,13 @@
     }
     results.hidden = false;
     results.innerHTML = top
-      .map(({ r }) =>
-        `<a class="search__result" href="${r.url}">
+      .map(({ r }) => {
+        const snippet = pickSnippet(r, query, tokens);
+        return `<a class="search__result" href="${r.url}">
            <div class="search__crumb">${r.breadcrumb || ""}${r.breadcrumb ? " · " : ""}<strong>${r.title}</strong></div>
-           <div class="search__snippet">${highlight(r.snippet, tokens)}</div>
-         </a>`
-      )
+           <div class="search__snippet">${highlight(snippet, query, tokens)}</div>
+         </a>`;
+      })
       .join("");
   }
 
