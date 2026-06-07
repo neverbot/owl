@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/neverbot/owl/internal/scrape"
@@ -30,6 +31,36 @@ type Discovery struct {
 	interval        time.Duration
 	defaultInterval time.Duration
 	defaultTimeout  time.Duration
+
+	healthMu sync.RWMutex
+	health   DiscoveryHealth
+}
+
+// DiscoveryHealth captures the most recent scan outcome for the docker
+// discovery loop. Returned by HealthSnapshot for the /targets page so
+// the operator can distinguish "discovery is off" from "discovery is
+// on but nothing matched the label prefix".
+type DiscoveryHealth struct {
+	// Interval is the configured period between scans.
+	Interval time.Duration `json:"interval"`
+	// LastScan is the wall-clock time of the most recent scan. Zero
+	// until the first scan completes.
+	LastScan time.Time `json:"last_scan,omitempty"`
+	// Duration is how long the most recent scan took.
+	Duration time.Duration `json:"duration,omitempty"`
+	// LastError is the message from the most recent failed scan, or
+	// empty on success. Set when ListContainers fails; per-container
+	// label issues (opted-in but missing port) are logged and skipped
+	// without flipping the row to error.
+	LastError string `json:"last_error,omitempty"`
+	// ContainersSeen is the total number of containers returned by
+	// ListContainers on the most recent scan.
+	ContainersSeen int `json:"containers_seen"`
+	// OptedIn is the count of containers that carry the opt-in label
+	// AND have all required label values (notably .port). Containers
+	// flagged as opted-in but missing required labels do NOT count
+	// here — they are reported via the log instead.
+	OptedIn int `json:"opted_in"`
 }
 
 // ContainerLister is the slice of the Docker client surface the
@@ -61,7 +92,31 @@ func NewDiscovery(client ContainerLister, opt DiscoveryOptions) *Discovery {
 		interval:        opt.Interval,
 		defaultInterval: opt.DefaultInterval,
 		defaultTimeout:  opt.DefaultTimeout,
+		health:          DiscoveryHealth{Interval: opt.Interval},
 	}
+}
+
+// HealthSnapshot returns a copy of the discovery loop's current
+// DiscoveryHealth. Safe to call concurrently with Run.
+func (d *Discovery) HealthSnapshot() DiscoveryHealth {
+	d.healthMu.RLock()
+	defer d.healthMu.RUnlock()
+	return d.health
+}
+
+func (d *Discovery) recordHealth(seen, optedIn int, dur time.Duration, err error) {
+	d.healthMu.Lock()
+	defer d.healthMu.Unlock()
+	d.health.LastScan = time.Now()
+	d.health.Duration = dur
+	d.health.ContainersSeen = seen
+	if err != nil {
+		d.health.LastError = err.Error()
+		d.health.OptedIn = 0
+		return
+	}
+	d.health.LastError = ""
+	d.health.OptedIn = optedIn
 }
 
 // Run blocks until ctx is cancelled, scanning the daemon on each tick
@@ -98,10 +153,12 @@ func (d *Discovery) Run(ctx context.Context, out chan<- []scrape.Target) {
 }
 
 // scan performs one daemon list and converts opted-in containers to
-// scrape.Target values.
+// scrape.Target values. Records the outcome on the health snapshot.
 func (d *Discovery) scan(ctx context.Context) ([]scrape.Target, error) {
+	start := time.Now()
 	containers, err := d.client.ListContainers(ctx)
 	if err != nil {
+		d.recordHealth(0, 0, time.Since(start), err)
 		return nil, err
 	}
 	out := make([]scrape.Target, 0)
@@ -112,6 +169,7 @@ func (d *Discovery) scan(ctx context.Context) ([]scrape.Target, error) {
 		}
 		out = append(out, t)
 	}
+	d.recordHealth(len(containers), len(out), time.Since(start), nil)
 	return out, nil
 }
 

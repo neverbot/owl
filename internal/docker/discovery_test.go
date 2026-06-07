@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -14,6 +15,12 @@ type stubLister struct {
 
 func (s stubLister) ListContainers(_ context.Context) ([]Container, error) {
 	return s.containers, nil
+}
+
+type erroringLister struct{ err error }
+
+func (e erroringLister) ListContainers(_ context.Context) ([]Container, error) {
+	return nil, e.err
 }
 
 func TestDiscoveryToTargetHappyPath(t *testing.T) {
@@ -87,6 +94,63 @@ func TestDiscoveryDefaultsAndComposeService(t *testing.T) {
 	}
 	if got.Labels["job"] != "traefik" {
 		t.Errorf("job derived from compose.service = %q", got.Labels["job"])
+	}
+}
+
+func TestDiscoveryHealthSnapshotIsPendingBeforeFirstScan(t *testing.T) {
+	d := NewDiscovery(stubLister{}, DiscoveryOptions{Prefix: "owl.scrape", Interval: 7 * time.Second})
+	h := d.HealthSnapshot()
+	if !h.LastScan.IsZero() {
+		t.Errorf("LastScan = %v, want zero", h.LastScan)
+	}
+	if h.Interval != 7*time.Second {
+		t.Errorf("Interval = %v, want 7s", h.Interval)
+	}
+	if h.ContainersSeen != 0 || h.OptedIn != 0 || h.LastError != "" {
+		t.Errorf("expected empty health, got %+v", h)
+	}
+}
+
+func TestDiscoveryHealthSnapshotRecordsSuccess(t *testing.T) {
+	d := NewDiscovery(stubLister{containers: []Container{
+		{Names: []string{"/in"}, Labels: map[string]string{"owl.scrape": "true", "owl.scrape.port": "9090"}},
+		{Names: []string{"/out"}, Labels: map[string]string{"unrelated": "1"}},
+		{Names: []string{"/missing-port"}, Labels: map[string]string{"owl.scrape": "true"}},
+	}}, DiscoveryOptions{Prefix: "owl.scrape", Interval: time.Second})
+
+	if _, err := d.scan(context.Background()); err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+
+	h := d.HealthSnapshot()
+	if h.LastScan.IsZero() {
+		t.Error("LastScan should be set after scan")
+	}
+	if h.LastError != "" {
+		t.Errorf("LastError = %q, want empty", h.LastError)
+	}
+	if h.ContainersSeen != 3 {
+		t.Errorf("ContainersSeen = %d, want 3", h.ContainersSeen)
+	}
+	if h.OptedIn != 1 {
+		t.Errorf("OptedIn = %d, want 1 (the one with port; missing-port is opted in but skipped)", h.OptedIn)
+	}
+	if h.Duration < 0 {
+		t.Errorf("Duration = %v", h.Duration)
+	}
+}
+
+func TestDiscoveryHealthSnapshotRecordsError(t *testing.T) {
+	d := NewDiscovery(erroringLister{err: errors.New("socket closed")}, DiscoveryOptions{Prefix: "owl.scrape"})
+	if _, err := d.scan(context.Background()); err == nil {
+		t.Fatal("scan should have errored")
+	}
+	h := d.HealthSnapshot()
+	if h.LastError == "" {
+		t.Error("LastError should be set")
+	}
+	if h.OptedIn != 0 {
+		t.Errorf("OptedIn = %d, want 0 on error", h.OptedIn)
 	}
 }
 
