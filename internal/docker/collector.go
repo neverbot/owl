@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"log/slog"
+	"sort"
 	"sync"
 	"time"
 
@@ -20,6 +21,22 @@ type Collector struct {
 
 	healthMu sync.RWMutex
 	health   Health
+
+	containersMu sync.RWMutex
+	containers   []ContainerSnapshot
+}
+
+// ContainerSnapshot is the per-container view returned by
+// ContainersSnapshot. It carries the labels and resource readings the
+// /targets page renders so the operator can see what the collector is
+// actually observing on every tick — not just the aggregate count.
+type ContainerSnapshot struct {
+	Name             string    `json:"name"`
+	Image            string    `json:"image"`
+	ComposeService   string    `json:"compose_service,omitempty"`
+	ComposeProject   string    `json:"compose_project,omitempty"`
+	MemoryWorkingSet uint64    `json:"memory_working_set_bytes"`
+	LastSeen         time.Time `json:"last_seen,omitempty"`
 }
 
 // Health captures the most recent collection outcome for the docker
@@ -78,6 +95,25 @@ func (c *Collector) HealthSnapshot() Health {
 	return c.health
 }
 
+// ContainersSnapshot returns the per-container view captured on the
+// most recent successful tick, sorted by name. Empty before the first
+// tick or when ListContainers returned nothing. Safe to call
+// concurrently with Run.
+func (c *Collector) ContainersSnapshot() []ContainerSnapshot {
+	c.containersMu.RLock()
+	defer c.containersMu.RUnlock()
+	out := make([]ContainerSnapshot, len(c.containers))
+	copy(out, c.containers)
+	return out
+}
+
+func (c *Collector) recordContainers(snapshots []ContainerSnapshot) {
+	sort.Slice(snapshots, func(i, j int) bool { return snapshots[i].Name < snapshots[j].Name })
+	c.containersMu.Lock()
+	defer c.containersMu.Unlock()
+	c.containers = snapshots
+}
+
 func (c *Collector) recordHealth(containersSeen, samples int, dur time.Duration, err error) {
 	c.healthMu.Lock()
 	defer c.healthMu.Unlock()
@@ -133,8 +169,10 @@ func (c *Collector) CollectOnce(ctx context.Context) {
 	}
 
 	now := time.Now().UnixMilli()
+	nowT := time.Now()
 	type result struct {
-		samples []storage.Sample
+		samples  []storage.Sample
+		snapshot ContainerSnapshot
 	}
 	results := make(chan result, running)
 
@@ -151,15 +189,21 @@ func (c *Collector) CollectOnce(ctx context.Context) {
 				slog.Error("docker stats failed", "container", ct.Name(), "err", err)
 				return
 			}
-			results <- result{samples: containerSamples(ct, stats, now)}
+			results <- result{
+				samples:  containerSamples(ct, stats, now),
+				snapshot: containerSnapshot(ct, stats, nowT),
+			}
 		}(ct)
 	}
 	go func() { wg.Wait(); close(results) }()
 
 	var batch []storage.Sample
+	var snaps []ContainerSnapshot
 	for r := range results {
 		batch = append(batch, r.samples...)
+		snaps = append(snaps, r.snapshot)
 	}
+	c.recordContainers(snaps)
 	if len(batch) == 0 {
 		c.recordHealth(running, 0, time.Since(start), nil)
 		return
@@ -169,6 +213,19 @@ func (c *Collector) CollectOnce(ctx context.Context) {
 		slog.Error("docker append failed", "err", err)
 	}
 	c.recordHealth(running, len(batch), time.Since(start), err)
+}
+
+// containerSnapshot extracts the lightweight per-container view shown
+// on /targets from one container's labels and stats.
+func containerSnapshot(ct Container, st *Stats, now time.Time) ContainerSnapshot {
+	return ContainerSnapshot{
+		Name:             ct.Name(),
+		Image:            ct.Image,
+		ComposeService:   ct.Labels["com.docker.compose.service"],
+		ComposeProject:   ct.Labels["com.docker.compose.project"],
+		MemoryWorkingSet: workingSet(st.Memory),
+		LastSeen:         now,
+	}
 }
 
 // containerSamples translates one container's stats into samples.

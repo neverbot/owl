@@ -137,6 +137,84 @@ func TestCollectOnceEmitsContainerMetrics(t *testing.T) {
 	}
 }
 
+func TestContainersSnapshotIsEmptyBeforeFirstTick(t *testing.T) {
+	c := NewCollector(&fakeDocker{}, &fakeAppender{}, time.Second)
+	if got := c.ContainersSnapshot(); len(got) != 0 {
+		t.Errorf("ContainersSnapshot = %+v, want empty", got)
+	}
+}
+
+func TestContainersSnapshotCapturesRunningContainers(t *testing.T) {
+	d := &fakeDocker{
+		containers: []Container{
+			{
+				ID:    "abc",
+				Names: []string{"/owl"},
+				Image: "owl:dev",
+				State: "running",
+				Labels: map[string]string{
+					"com.docker.compose.service": "owl",
+					"com.docker.compose.project": "owl-stack",
+				},
+			},
+			{ID: "ghosted", Names: []string{"/ghost"}, State: "exited"},
+		},
+		stats: map[string]*Stats{
+			"abc": {
+				Memory: MemoryStats{
+					Usage: 10 * 1024 * 1024,
+					Stats: map[string]uint64{"inactive_file": 2 * 1024 * 1024},
+				},
+			},
+		},
+	}
+	c := NewCollector(d, &fakeAppender{}, time.Second)
+	c.CollectOnce(context.Background())
+
+	got := c.ContainersSnapshot()
+	if len(got) != 1 {
+		t.Fatalf("len(snapshot) = %d, want 1 (stopped containers excluded)", len(got))
+	}
+	cs := got[0]
+	if cs.Name != "owl" || cs.Image != "owl:dev" {
+		t.Errorf("name/image = %q/%q, want owl/owl:dev", cs.Name, cs.Image)
+	}
+	if cs.ComposeService != "owl" || cs.ComposeProject != "owl-stack" {
+		t.Errorf("compose = %q/%q", cs.ComposeService, cs.ComposeProject)
+	}
+	wantMem := uint64(10*1024*1024 - 2*1024*1024)
+	if cs.MemoryWorkingSet != wantMem {
+		t.Errorf("memory = %d, want %d", cs.MemoryWorkingSet, wantMem)
+	}
+	if cs.LastSeen.IsZero() {
+		t.Error("LastSeen should be set")
+	}
+}
+
+func TestContainersSnapshotIsSortedByName(t *testing.T) {
+	d := &fakeDocker{
+		containers: []Container{
+			{ID: "z", Names: []string{"/zeta"}, State: "running"},
+			{ID: "a", Names: []string{"/alpha"}, State: "running"},
+			{ID: "m", Names: []string{"/mid"}, State: "running"},
+		},
+		stats: map[string]*Stats{
+			"z": {Memory: MemoryStats{Usage: 1}},
+			"a": {Memory: MemoryStats{Usage: 1}},
+			"m": {Memory: MemoryStats{Usage: 1}},
+		},
+	}
+	c := NewCollector(d, &fakeAppender{}, time.Second)
+	c.CollectOnce(context.Background())
+	got := c.ContainersSnapshot()
+	if len(got) != 3 {
+		t.Fatalf("len = %d, want 3", len(got))
+	}
+	if got[0].Name != "alpha" || got[1].Name != "mid" || got[2].Name != "zeta" {
+		t.Errorf("not sorted: %v %v %v", got[0].Name, got[1].Name, got[2].Name)
+	}
+}
+
 func TestHealthSnapshotIsPendingBeforeFirstTick(t *testing.T) {
 	c := NewCollector(&fakeDocker{}, &fakeAppender{}, 7*time.Second)
 	h := c.HealthSnapshot()
