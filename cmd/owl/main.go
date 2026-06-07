@@ -124,8 +124,11 @@ func run(cfg config.Config, configPath string) error {
 	// Optional Linux host collector (/proc + /sys). Disabled by default
 	// because /proc does not exist on every platform owl might run on
 	// (macOS dev environments, distroless without bind-mounts, etc.).
+	// Kept in scope so the web layer can surface its HealthSnapshot on
+	// /targets alongside HTTP scrape targets.
+	var hostCol *host.Collector
 	if cfg.Host.Enabled {
-		hostCol := host.New(store, host.Options{
+		hostCol = host.New(store, host.Options{
 			ProcPath: cfg.Host.ProcPath,
 			Interval: cfg.Host.Interval,
 		})
@@ -152,11 +155,14 @@ func run(cfg config.Config, configPath string) error {
 	// label-based scrape-target discovery. Both share one HTTP-over-
 	// Unix-socket client. Disabled by default so the binary works on
 	// hosts without a Docker daemon.
+	// dockerCol stays in outer scope so the web layer can surface its
+	// HealthSnapshot on /targets when docker.metrics is enabled.
+	var dockerCol *docker.Collector
 	if cfg.Docker.Enabled {
 		dockerClient := docker.NewClient(cfg.Docker.SocketPath)
 
 		if cfg.Docker.Metrics.Enabled {
-			dockerCol := docker.NewCollector(dockerClient, store, cfg.Docker.Metrics.Interval)
+			dockerCol = docker.NewCollector(dockerClient, store, cfg.Docker.Metrics.Interval)
 			spawn(func() { dockerCol.Run(ctx) })
 			slog.Info("docker metrics collector started",
 				"socket", cfg.Docker.SocketPath, "interval", cfg.Docker.Metrics.Interval)
@@ -287,12 +293,13 @@ func run(cfg config.Config, configPath string) error {
 	srv := &http.Server{
 		Addr: cfg.Listen,
 		Handler: web.NewServer(web.Options{
-			Store:    store,
-			Engine:   engine,
-			Loader:   dashLoader,
-			Scrape:   scrapeMgr,
-			Alerter:  alerter,
-			OnReload: reload,
+			Store:      store,
+			Engine:     engine,
+			Loader:     dashLoader,
+			Scrape:     scrapeMgr,
+			Collectors: collectorsAdapter{host: hostCol, docker: dockerCol},
+			Alerter:    alerter,
+			OnReload:   reload,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
@@ -416,6 +423,58 @@ func describeListen(addr string) string {
 	default:
 		return "listening on http://" + addr
 	}
+}
+
+// collectorsAdapter implements web.CollectorsHealth by translating
+// each enabled in-process collector's native Health type into the
+// uniform web.CollectorHealth shape rendered on /targets. Fields are
+// nil when the corresponding collector is disabled, in which case it
+// is skipped.
+type collectorsAdapter struct {
+	host   *host.Collector
+	docker *docker.Collector
+}
+
+// CollectorsSnapshot returns one entry per enabled collector. Order is
+// stable: host first (when present), then docker. The web layer is
+// free to call this on every render — both underlying snapshots are
+// cheap copies guarded by RWMutex.
+func (a collectorsAdapter) CollectorsSnapshot() []web.CollectorHealth {
+	var out []web.CollectorHealth
+	if a.host != nil {
+		h := a.host.HealthSnapshot()
+		out = append(out, web.CollectorHealth{
+			Name:           "host",
+			Kind:           "host",
+			Interval:       h.Interval,
+			LastCollection: h.LastCollection,
+			Duration:       h.Duration,
+			LastError:      h.LastError,
+			LastSamples:    h.LastSamples,
+		})
+	}
+	if a.docker != nil {
+		h := a.docker.HealthSnapshot()
+		extra := ""
+		if h.ContainersSeen > 0 {
+			suffix := "s"
+			if h.ContainersSeen == 1 {
+				suffix = ""
+			}
+			extra = fmt.Sprintf("%d container%s seen", h.ContainersSeen, suffix)
+		}
+		out = append(out, web.CollectorHealth{
+			Name:           "docker",
+			Kind:           "docker_metrics",
+			Interval:       h.Interval,
+			LastCollection: h.LastCollection,
+			Duration:       h.Duration,
+			LastError:      h.LastError,
+			LastSamples:    h.LastSamples,
+			Extra:          extra,
+		})
+	}
+	return out
 }
 
 func ensureDir(path string) error {

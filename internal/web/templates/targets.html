@@ -78,6 +78,44 @@
       auto-discover them via Docker.
     </p>
     {{end}}
+
+    {{if .Collectors}}
+    <h2 class="page-title">internal collectors</h2>
+    <p class="page-hint">
+      In-process sources that write directly to storage, bypassing the
+      scrape pipeline.
+    </p>
+    <table class="targets">
+      <thead>
+        <tr>
+          <th>name</th>
+          <th>kind</th>
+          <th>status</th>
+          <th>last collection</th>
+          <th class="num">duration</th>
+          <th class="num">samples</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Collectors}}
+        <tr class="t-row t-row--{{.Status}}">
+          <td>
+            <div class="t-name">{{.Name}}</div>
+            {{if .Extra}}<div class="t-sub">{{.Extra}}</div>{{end}}
+          </td>
+          <td class="t-url">{{.Kind}}</td>
+          <td>
+            <span class="t-status t-status--{{.Status}}">{{.Status}}</span>
+            {{if .Error}}<div class="t-err">{{.Error}}</div>{{end}}
+          </td>
+          <td>{{.LastCollection}}</td>
+          <td class="num">{{.Duration}}</td>
+          <td class="num">{{.Samples}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    {{end}}
   </div>
   <script src="/static/app.js"></script>
 </body>

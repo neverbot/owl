@@ -33,6 +33,11 @@ type Options struct {
 	// Scrape exposes per-target health for /api/targets and /targets.
 	// nil disables those endpoints.
 	Scrape ScrapeHealth
+	// Collectors exposes per-collector health (host, docker container
+	// metrics, …) on the same /targets page so operators can see the
+	// in-process metric sources that bypass the scrape pipeline. nil
+	// means no internal collectors are enabled.
+	Collectors CollectorsHealth
 	// Alerter exposes counters for the /metrics endpoint. nil omits
 	// the owl_alerts_* gauges from the exposition.
 	Alerter AlerterStats
@@ -48,6 +53,30 @@ type Options struct {
 // Defined as an interface so unit tests can plug a fake.
 type ScrapeHealth interface {
 	HealthSnapshot() []scrape.TargetHealth
+}
+
+// CollectorsHealth exposes the latest health of every enabled internal
+// collector (host, docker container metrics). Implementations live in
+// the wiring layer (cmd/owl) and adapt each collector's native Health
+// type to the uniform CollectorHealth shape rendered on /targets.
+type CollectorsHealth interface {
+	CollectorsSnapshot() []CollectorHealth
+}
+
+// CollectorHealth is the uniform per-collector health snapshot the
+// web layer renders. Kind is a short token ("host", "docker_metrics")
+// so future kinds can be added without changing the schema. Extra is
+// a free-form, single-line note shown next to the row (for example
+// "3 containers seen").
+type CollectorHealth struct {
+	Name           string        `json:"name"`
+	Kind           string        `json:"kind"`
+	Interval       time.Duration `json:"interval"`
+	LastCollection time.Time     `json:"last_collection,omitempty"`
+	Duration       time.Duration `json:"duration,omitempty"`
+	LastError      string        `json:"last_error,omitempty"`
+	LastSamples    int           `json:"last_samples"`
+	Extra          string        `json:"extra,omitempty"`
 }
 
 // AlerterStats is the slice of alert.Manager the /metrics handler
