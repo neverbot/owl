@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>targets — owl</title>
+  <title>metric sources — owl</title>
   <script>(function(){try{var t=localStorage.getItem('owl-theme');if(t!=='light'&&t!=='dark'){t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
   <link rel="stylesheet" href="/static/owl.css">
   {{template "favicons"}}
@@ -15,7 +15,7 @@
       <div class="topbar__crumbs">
         <a href="/">dashboards</a>
         <span class="sep">/</span>
-        <span class="current">targets</span>
+        <span class="current">sources</span>
       </div>
       <button class="theme-toggle" data-theme-toggle aria-label="Toggle colour theme" type="button">
         <svg class="icon-sun" viewBox="0 0 16 16" aria-hidden="true">
@@ -37,9 +37,14 @@
       </button>
     </nav>
 
-    <h1 class="page-title">scrape targets</h1>
+    <h1 class="page-title">metric sources</h1>
+
+    <h2 class="page-title">scrape targets</h2>
     {{if .Rows}}
-    <p class="page-hint">{{len .Rows}} active target{{if ne (len .Rows) 1}}s{{end}}.</p>
+    <p class="page-hint">
+      {{len .Rows}} active target{{if ne (len .Rows) 1}}s{{end}} —
+      HTTP endpoints owl pulls metrics from on a schedule.
+    </p>
     <table class="targets">
       <thead>
         <tr>
@@ -82,7 +87,8 @@
     {{if .Collectors}}
     <h2 class="page-title">internal collectors</h2>
     <p class="page-hint">
-      In-process sources that write directly to storage, bypassing the
+      {{len .Collectors}} active collector{{if ne (len .Collectors) 1}}s{{end}} —
+      in-process sources that write directly to storage, bypassing the
       scrape pipeline.
     </p>
     <table class="targets">

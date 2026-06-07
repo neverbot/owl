@@ -83,6 +83,7 @@ func TestTargetsViewRendersTable(t *testing.T) {
 	}
 	body := rec.Body.Bytes()
 	for _, want := range [][]byte{
+		[]byte(`metric sources`),
 		[]byte(`scrape targets`),
 		[]byte(`traefik`),
 		[]byte(`http://traefik:8082/metrics`),
