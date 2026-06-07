@@ -2,12 +2,19 @@ package host
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/neverbot/owl/internal/storage"
 )
+
+var errBoom = errors.New("boom")
+
+type erroringAppender struct{ err error }
+
+func (e *erroringAppender) Append(_ []storage.Sample) error { return e.err }
 
 type fakeAppender struct {
 	mu      sync.Mutex
@@ -68,6 +75,53 @@ func TestCollectOnceEmitsSamplesFromAllParsers(t *testing.T) {
 		if !found {
 			t.Errorf("metric %q missing from batch", metric)
 		}
+	}
+}
+
+func TestHealthSnapshotIsPendingBeforeFirstTick(t *testing.T) {
+	c := NewFromFS(&fakeAppender{}, makeProc(), 5*time.Second, func() int64 { return 1000 })
+	h := c.HealthSnapshot()
+	if !h.LastCollection.IsZero() {
+		t.Errorf("LastCollection = %v, want zero", h.LastCollection)
+	}
+	if h.LastSamples != 0 || h.LastError != "" {
+		t.Errorf("expected empty health, got %+v", h)
+	}
+	if h.Interval != 5*time.Second {
+		t.Errorf("Interval = %v, want 5s", h.Interval)
+	}
+}
+
+func TestHealthSnapshotRecordsSuccessfulCollection(t *testing.T) {
+	c := NewFromFS(&fakeAppender{}, makeProc(), time.Millisecond, func() int64 { return 1000 })
+	c.CollectOnce()
+
+	h := c.HealthSnapshot()
+	if h.LastCollection.IsZero() {
+		t.Error("LastCollection should be set after CollectOnce")
+	}
+	if h.LastError != "" {
+		t.Errorf("LastError = %q, want empty", h.LastError)
+	}
+	if h.LastSamples == 0 {
+		t.Errorf("LastSamples = %d, want > 0", h.LastSamples)
+	}
+	if h.Duration <= 0 {
+		t.Errorf("Duration = %v, want > 0", h.Duration)
+	}
+}
+
+func TestHealthSnapshotRecordsAppendError(t *testing.T) {
+	app := &erroringAppender{err: errBoom}
+	c := NewFromFS(app, makeProc(), time.Millisecond, func() int64 { return 1000 })
+	c.CollectOnce()
+
+	h := c.HealthSnapshot()
+	if h.LastError == "" {
+		t.Error("LastError should be set when Append fails")
+	}
+	if h.LastSamples != 0 {
+		t.Errorf("LastSamples = %d, want 0 on error", h.LastSamples)
 	}
 }
 
