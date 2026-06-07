@@ -523,7 +523,7 @@ endpoint returns `500` with the parse error.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [license.md](license.md).
 
 ## Building from source
 
