@@ -2,12 +2,26 @@ package docker
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/neverbot/owl/internal/storage"
 )
+
+type erroringAppender struct{ err error }
+
+func (e *erroringAppender) Append(_ []storage.Sample) error { return e.err }
+
+type erroringDocker struct{ err error }
+
+func (e *erroringDocker) ListContainers(_ context.Context) ([]Container, error) {
+	return nil, e.err
+}
+func (e *erroringDocker) ContainerStats(_ context.Context, _ string) (*Stats, error) {
+	return nil, e.err
+}
 
 type fakeDocker struct {
 	containers []Container
@@ -120,6 +134,81 @@ func TestCollectOnceEmitsContainerMetrics(t *testing.T) {
 	}
 	if _, ok := idx["container_fs_reads_bytes_total"]; !ok {
 		t.Error("missing fs reads")
+	}
+}
+
+func TestHealthSnapshotIsPendingBeforeFirstTick(t *testing.T) {
+	c := NewCollector(&fakeDocker{}, &fakeAppender{}, 7*time.Second)
+	h := c.HealthSnapshot()
+	if !h.LastCollection.IsZero() {
+		t.Errorf("LastCollection = %v, want zero", h.LastCollection)
+	}
+	if h.Interval != 7*time.Second {
+		t.Errorf("Interval = %v, want 7s", h.Interval)
+	}
+	if h.ContainersSeen != 0 || h.LastSamples != 0 || h.LastError != "" {
+		t.Errorf("expected empty health, got %+v", h)
+	}
+}
+
+func TestHealthSnapshotRecordsSuccessfulCollection(t *testing.T) {
+	d := &fakeDocker{
+		containers: []Container{{ID: "abc", Names: []string{"/owl"}, State: "running"}},
+		stats: map[string]*Stats{
+			"abc": {Memory: MemoryStats{Usage: 1024}},
+		},
+	}
+	c := NewCollector(d, &fakeAppender{}, time.Second)
+	c.CollectOnce(context.Background())
+
+	h := c.HealthSnapshot()
+	if h.LastCollection.IsZero() {
+		t.Error("LastCollection should be set after CollectOnce")
+	}
+	if h.LastError != "" {
+		t.Errorf("LastError = %q, want empty", h.LastError)
+	}
+	if h.ContainersSeen != 1 {
+		t.Errorf("ContainersSeen = %d, want 1", h.ContainersSeen)
+	}
+	if h.LastSamples == 0 {
+		t.Errorf("LastSamples = %d, want > 0", h.LastSamples)
+	}
+	if h.Duration <= 0 {
+		t.Errorf("Duration = %v, want > 0", h.Duration)
+	}
+}
+
+func TestHealthSnapshotRecordsListError(t *testing.T) {
+	c := NewCollector(&erroringDocker{err: errors.New("nope")}, &fakeAppender{}, time.Second)
+	c.CollectOnce(context.Background())
+
+	h := c.HealthSnapshot()
+	if h.LastError == "" {
+		t.Error("LastError should reflect ListContainers failure")
+	}
+	if h.LastSamples != 0 {
+		t.Errorf("LastSamples = %d, want 0", h.LastSamples)
+	}
+}
+
+func TestHealthSnapshotRecordsAppendError(t *testing.T) {
+	d := &fakeDocker{
+		containers: []Container{{ID: "abc", Names: []string{"/owl"}, State: "running"}},
+		stats:      map[string]*Stats{"abc": {Memory: MemoryStats{Usage: 1024}}},
+	}
+	c := NewCollector(d, &erroringAppender{err: errors.New("disk full")}, time.Second)
+	c.CollectOnce(context.Background())
+
+	h := c.HealthSnapshot()
+	if h.LastError == "" {
+		t.Error("LastError should reflect Append failure")
+	}
+	if h.LastSamples != 0 {
+		t.Errorf("LastSamples = %d, want 0 on error", h.LastSamples)
+	}
+	if h.ContainersSeen != 1 {
+		t.Errorf("ContainersSeen = %d, want 1 (containers were seen, even though append failed)", h.ContainersSeen)
 	}
 }
 

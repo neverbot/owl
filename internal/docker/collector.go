@@ -17,6 +17,35 @@ type Collector struct {
 	client   ContainerStatsLister
 	app      storage.Appender
 	interval time.Duration
+
+	healthMu sync.RWMutex
+	health   Health
+}
+
+// Health captures the most recent collection outcome for the docker
+// container-metrics collector. Returned by HealthSnapshot for the
+// /targets page and the /api/targets JSON endpoint.
+type Health struct {
+	// Interval is the configured period between collections.
+	Interval time.Duration `json:"interval"`
+	// LastCollection is the wall-clock time of the most recent
+	// CollectOnce. Zero until the first tick fires.
+	LastCollection time.Time `json:"last_collection,omitempty"`
+	// Duration is how long the most recent CollectOnce took.
+	Duration time.Duration `json:"duration,omitempty"`
+	// LastError is the message from the most recent failed tick, or
+	// empty on success. Set when ListContainers or Append fails;
+	// per-container stats failures are logged but do not flip the
+	// overall health here.
+	LastError string `json:"last_error,omitempty"`
+	// LastSamples is the number of samples appended by the most
+	// recent successful tick (0 on error or when no running
+	// container was visible).
+	LastSamples int `json:"last_samples"`
+	// ContainersSeen is the number of running containers that were
+	// returned by ListContainers on the most recent tick (regardless
+	// of whether stats collection then succeeded for each).
+	ContainersSeen int `json:"containers_seen"`
 }
 
 // ContainerStatsLister is the slice of the Docker client surface the
@@ -33,7 +62,35 @@ func NewCollector(client ContainerStatsLister, app storage.Appender, interval ti
 	if interval <= 0 {
 		interval = 10 * time.Second
 	}
-	return &Collector{client: client, app: app, interval: interval}
+	return &Collector{
+		client:   client,
+		app:      app,
+		interval: interval,
+		health:   Health{Interval: interval},
+	}
+}
+
+// HealthSnapshot returns a copy of the collector's current Health.
+// Safe to call concurrently with Run.
+func (c *Collector) HealthSnapshot() Health {
+	c.healthMu.RLock()
+	defer c.healthMu.RUnlock()
+	return c.health
+}
+
+func (c *Collector) recordHealth(containersSeen, samples int, dur time.Duration, err error) {
+	c.healthMu.Lock()
+	defer c.healthMu.Unlock()
+	c.health.LastCollection = time.Now()
+	c.health.Duration = dur
+	c.health.ContainersSeen = containersSeen
+	if err != nil {
+		c.health.LastError = err.Error()
+		c.health.LastSamples = 0
+		return
+	}
+	c.health.LastError = ""
+	c.health.LastSamples = samples
 }
 
 // Run blocks until ctx is cancelled.
@@ -52,14 +109,26 @@ func (c *Collector) Run(ctx context.Context) {
 }
 
 // CollectOnce lists running containers, fetches stats for each in
-// parallel, and appends the merged batch.
+// parallel, and appends the merged batch. Updates the Health snapshot
+// with the tick's outcome.
 func (c *Collector) CollectOnce(ctx context.Context) {
+	start := time.Now()
 	containers, err := c.client.ListContainers(ctx)
 	if err != nil {
 		slog.Error("docker list failed", "err", err)
+		c.recordHealth(0, 0, time.Since(start), err)
 		return
 	}
-	if len(containers) == 0 {
+
+	running := 0
+	for _, ct := range containers {
+		if ct.State == "" || ct.State == "running" {
+			running++
+		}
+	}
+
+	if running == 0 {
+		c.recordHealth(0, 0, time.Since(start), nil)
 		return
 	}
 
@@ -67,7 +136,7 @@ func (c *Collector) CollectOnce(ctx context.Context) {
 	type result struct {
 		samples []storage.Sample
 	}
-	results := make(chan result, len(containers))
+	results := make(chan result, running)
 
 	var wg sync.WaitGroup
 	for _, ct := range containers {
@@ -92,11 +161,14 @@ func (c *Collector) CollectOnce(ctx context.Context) {
 		batch = append(batch, r.samples...)
 	}
 	if len(batch) == 0 {
+		c.recordHealth(running, 0, time.Since(start), nil)
 		return
 	}
-	if err := c.app.Append(batch); err != nil {
+	err = c.app.Append(batch)
+	if err != nil {
 		slog.Error("docker append failed", "err", err)
 	}
+	c.recordHealth(running, len(batch), time.Since(start), err)
 }
 
 // containerSamples translates one container's stats into samples.
