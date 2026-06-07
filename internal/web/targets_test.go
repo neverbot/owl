@@ -199,3 +199,100 @@ func TestTargetsViewHidesCollectorsSectionWhenAbsent(t *testing.T) {
 		t.Error("collectors section should be hidden when none are wired")
 	}
 }
+
+type fakeContainersHealth struct {
+	entries []ContainerInfo
+}
+
+func (f *fakeContainersHealth) ContainersSnapshot() []ContainerInfo {
+	out := make([]ContainerInfo, len(f.entries))
+	copy(out, f.entries)
+	return out
+}
+
+func TestAPITargetsIncludesContainers(t *testing.T) {
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	containers := &fakeContainersHealth{entries: []ContainerInfo{
+		{Name: "owl", Image: "owl:dev", ComposeService: "owl", ComposeProject: "stack",
+			MemoryWorkingSetBytes: 12 * 1024 * 1024, LastSeen: now},
+	}}
+	s := NewServer(Options{Scrape: &fakeScrapeHealth{}, Containers: containers})
+
+	rec := httptest.NewRecorder()
+	s.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/targets", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	var got struct {
+		Containers []ContainerInfo `json:"containers"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got.Containers) != 1 || got.Containers[0].Name != "owl" {
+		t.Errorf("containers = %+v", got.Containers)
+	}
+	if got.Containers[0].MemoryWorkingSetBytes != 12*1024*1024 {
+		t.Errorf("memory = %d", got.Containers[0].MemoryWorkingSetBytes)
+	}
+}
+
+func TestTargetsViewRendersContainersSection(t *testing.T) {
+	now := time.Now()
+	containers := &fakeContainersHealth{entries: []ContainerInfo{
+		{Name: "owl", Image: "owl:dev", ComposeService: "owl", ComposeProject: "stack",
+			MemoryWorkingSetBytes: 12 * 1024 * 1024, LastSeen: now},
+		{Name: "traefik", Image: "traefik:v3", MemoryWorkingSetBytes: 256 * 1024 * 1024, LastSeen: now},
+	}}
+	s := NewServer(Options{Scrape: &fakeScrapeHealth{}, Containers: containers})
+
+	rec := httptest.NewRecorder()
+	s.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/targets", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	body := rec.Body.Bytes()
+	for _, want := range [][]byte{
+		[]byte("containers"),
+		[]byte("owl:dev"),
+		[]byte("traefik:v3"),
+		[]byte("owl · stack"),
+		[]byte("12 MiB"),
+		[]byte("256 MiB"),
+	} {
+		if !bytes.Contains(body, want) {
+			t.Errorf("body missing %q", want)
+		}
+	}
+}
+
+func TestTargetsViewHidesContainersSectionWhenAbsent(t *testing.T) {
+	s := NewServer(Options{Scrape: &fakeScrapeHealth{}})
+	rec := httptest.NewRecorder()
+	s.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/targets", nil))
+	body := rec.Body.Bytes()
+	// "containers" appears in tabs/labels sometimes; the discriminator
+	// here is the page-hint line we render only when the section is on.
+	if bytes.Contains(body, []byte("observed on the last docker tick")) {
+		t.Error("containers section should be hidden when not wired")
+	}
+}
+
+func TestHumanBytesFormatting(t *testing.T) {
+	cases := []struct {
+		in   uint64
+		want string
+	}{
+		{0, "0 B"},
+		{512, "512 B"},
+		{1024, "1.0 KiB"},
+		{1536, "1.5 KiB"},
+		{12 * 1024 * 1024, "12 MiB"},
+		{1024 * 1024 * 1024, "1.0 GiB"},
+	}
+	for _, c := range cases {
+		if got := humanBytes(c.in); got != c.want {
+			t.Errorf("humanBytes(%d) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}

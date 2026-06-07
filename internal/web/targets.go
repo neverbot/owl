@@ -3,6 +3,7 @@ package web
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/neverbot/owl/internal/scrape"
@@ -27,6 +28,9 @@ func (s *Server) apiTargets(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.opt.Collectors != nil {
 		body["collectors"] = s.opt.Collectors.CollectorsSnapshot()
+	}
+	if s.opt.Containers != nil {
+		body["containers"] = s.opt.Containers.ContainersSnapshot()
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(body)
@@ -54,8 +58,14 @@ func (s *Server) targetsView(w http.ResponseWriter, r *http.Request) {
 			collectors = append(collectors, toCollectorRow(h))
 		}
 	}
+	var containers []containerRow
+	if s.opt.Containers != nil {
+		for _, ci := range s.opt.Containers.ContainersSnapshot() {
+			containers = append(containers, toContainerRow(ci))
+		}
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tmpl.ExecuteTemplate(w, "targets.html", targetsTemplateData{Rows: rows, Collectors: collectors}); err != nil {
+	if err := s.tmpl.ExecuteTemplate(w, "targets.html", targetsTemplateData{Rows: rows, Collectors: collectors, Containers: containers}); err != nil {
 		_ = err
 	}
 }
@@ -63,6 +73,59 @@ func (s *Server) targetsView(w http.ResponseWriter, r *http.Request) {
 type targetsTemplateData struct {
 	Rows       []targetRow
 	Collectors []collectorRow
+	Containers []containerRow
+}
+
+type containerRow struct {
+	Name           string
+	Compose        string // "service · project" when present
+	Image          string
+	Memory         string
+	LastSeen       string
+}
+
+func toContainerRow(ci ContainerInfo) containerRow {
+	row := containerRow{
+		Name:   ci.Name,
+		Image:  ci.Image,
+		Memory: humanBytes(ci.MemoryWorkingSetBytes),
+	}
+	switch {
+	case ci.ComposeService != "" && ci.ComposeProject != "":
+		row.Compose = ci.ComposeService + " · " + ci.ComposeProject
+	case ci.ComposeService != "":
+		row.Compose = ci.ComposeService
+	case ci.ComposeProject != "":
+		row.Compose = ci.ComposeProject
+	}
+	if ci.LastSeen.IsZero() {
+		row.LastSeen = "—"
+	} else {
+		row.LastSeen = relativeTime(ci.LastSeen)
+	}
+	return row
+}
+
+// humanBytes renders n as a short, binary-prefixed value (KiB, MiB,
+// GiB, …) with at most one decimal place. Mirrors the convention used
+// across the bundled dashboards so the /targets row reads at the same
+// scale as the chart that plots it.
+func humanBytes(n uint64) string {
+	const unit = 1024
+	if n < unit {
+		return strconv.FormatUint(n, 10) + " B"
+	}
+	div, exp := uint64(unit), 0
+	for r := n / unit; r >= unit; r /= unit {
+		div *= unit
+		exp++
+	}
+	suffix := []string{"KiB", "MiB", "GiB", "TiB", "PiB"}[exp]
+	v := float64(n) / float64(div)
+	if v >= 10 {
+		return strconv.FormatFloat(v, 'f', 0, 64) + " " + suffix
+	}
+	return strconv.FormatFloat(v, 'f', 1, 64) + " " + suffix
 }
 
 type collectorRow struct {

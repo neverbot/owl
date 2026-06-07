@@ -298,6 +298,7 @@ func run(cfg config.Config, configPath string) error {
 			Loader:     dashLoader,
 			Scrape:     scrapeMgr,
 			Collectors: collectorsAdapter{host: hostCol, docker: dockerCol},
+			Containers: containersAdapter{docker: dockerCol},
 			Alerter:    alerter,
 			OnReload:   reload,
 		}),
@@ -472,6 +473,40 @@ func (a collectorsAdapter) CollectorsSnapshot() []web.CollectorHealth {
 			LastError:      h.LastError,
 			LastSamples:    h.LastSamples,
 			Extra:          extra,
+		})
+	}
+	return out
+}
+
+// containersAdapter implements web.ContainersHealth by reading the
+// docker collector's per-container snapshot and translating it to the
+// uniform web.ContainerInfo shape rendered on /targets. Returns nil
+// when the docker integration is disabled so the section is omitted
+// from both the page and the JSON.
+type containersAdapter struct {
+	docker *docker.Collector
+}
+
+// ContainersSnapshot returns one entry per container observed on the
+// docker collector's last successful tick. Order matches the
+// collector's own sort (by name).
+func (a containersAdapter) ContainersSnapshot() []web.ContainerInfo {
+	if a.docker == nil {
+		return nil
+	}
+	snap := a.docker.ContainersSnapshot()
+	if len(snap) == 0 {
+		return nil
+	}
+	out := make([]web.ContainerInfo, 0, len(snap))
+	for _, c := range snap {
+		out = append(out, web.ContainerInfo{
+			Name:                  c.Name,
+			Image:                 c.Image,
+			ComposeService:        c.ComposeService,
+			ComposeProject:        c.ComposeProject,
+			MemoryWorkingSetBytes: c.MemoryWorkingSet,
+			LastSeen:              c.LastSeen,
 		})
 	}
 	return out

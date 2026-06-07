@@ -38,6 +38,10 @@ type Options struct {
 	// in-process metric sources that bypass the scrape pipeline. nil
 	// means no internal collectors are enabled.
 	Collectors CollectorsHealth
+	// Containers exposes the docker collector's per-container view,
+	// rendered as a third section on /targets. nil disables the
+	// section.
+	Containers ContainersHealth
 	// Alerter exposes counters for the /metrics endpoint. nil omits
 	// the owl_alerts_* gauges from the exposition.
 	Alerter AlerterStats
@@ -61,6 +65,26 @@ type ScrapeHealth interface {
 // type to the uniform CollectorHealth shape rendered on /targets.
 type CollectorsHealth interface {
 	CollectorsSnapshot() []CollectorHealth
+}
+
+// ContainersHealth exposes the per-container view captured by the
+// docker collector on its most recent tick. nil means the docker
+// integration is disabled or no containers were observed yet.
+type ContainersHealth interface {
+	ContainersSnapshot() []ContainerInfo
+}
+
+// ContainerInfo is one row in the "containers" section of /targets.
+// MemoryWorkingSetBytes mirrors cAdvisor's `container_memory_usage_bytes`
+// (usage minus inactive file cache), so the value here matches what
+// the Containers dashboard plots.
+type ContainerInfo struct {
+	Name                  string    `json:"name"`
+	Image                 string    `json:"image"`
+	ComposeService        string    `json:"compose_service,omitempty"`
+	ComposeProject        string    `json:"compose_project,omitempty"`
+	MemoryWorkingSetBytes uint64    `json:"memory_working_set_bytes"`
+	LastSeen              time.Time `json:"last_seen,omitempty"`
 }
 
 // CollectorHealth is the uniform per-collector health snapshot the

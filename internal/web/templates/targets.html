@@ -122,6 +122,37 @@
       </tbody>
     </table>
     {{end}}
+
+    {{if .Containers}}
+    <h2 class="page-title">containers</h2>
+    <p class="page-hint">
+      {{len .Containers}} container{{if ne (len .Containers) 1}}s{{end}}
+      observed on the last docker tick.
+    </p>
+    <table class="targets">
+      <thead>
+        <tr>
+          <th>name</th>
+          <th>image</th>
+          <th>last seen</th>
+          <th class="num">memory</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Containers}}
+        <tr class="t-row t-row--ok">
+          <td>
+            <div class="t-name">{{.Name}}</div>
+            {{if .Compose}}<div class="t-sub">{{.Compose}}</div>{{end}}
+          </td>
+          <td class="t-url">{{.Image}}</td>
+          <td>{{.LastSeen}}</td>
+          <td class="num">{{.Memory}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    {{end}}
   </div>
   <script src="/static/app.js"></script>
 </body>
