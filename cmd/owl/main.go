@@ -155,9 +155,11 @@ func run(cfg config.Config, configPath string) error {
 	// label-based scrape-target discovery. Both share one HTTP-over-
 	// Unix-socket client. Disabled by default so the binary works on
 	// hosts without a Docker daemon.
-	// dockerCol stays in outer scope so the web layer can surface its
-	// HealthSnapshot on /targets when docker.metrics is enabled.
+	// dockerCol and dockerDisc stay in outer scope so the web layer can
+	// surface their HealthSnapshots on /targets when each integration
+	// is enabled.
 	var dockerCol *docker.Collector
+	var dockerDisc *docker.Discovery
 	if cfg.Docker.Enabled {
 		dockerClient := docker.NewClient(cfg.Docker.SocketPath)
 
@@ -169,14 +171,14 @@ func run(cfg config.Config, configPath string) error {
 		}
 
 		if cfg.Docker.Discovery.Enabled {
-			disc := docker.NewDiscovery(dockerClient, docker.DiscoveryOptions{
+			dockerDisc = docker.NewDiscovery(dockerClient, docker.DiscoveryOptions{
 				Prefix:          cfg.Docker.Discovery.LabelPrefix,
 				Interval:        cfg.Docker.Discovery.Interval,
 				DefaultInterval: cfg.Scrape.DefaultInterval,
 				DefaultTimeout:  cfg.Scrape.DefaultTimeout,
 			})
 			snapshots := make(chan []scrape.Target, 4)
-			spawn(func() { disc.Run(ctx, snapshots) })
+			spawn(func() { dockerDisc.Run(ctx, snapshots) })
 			spawn(func() {
 				for found := range snapshots {
 					y := *yamlTargetsPtr.Load()
@@ -297,7 +299,7 @@ func run(cfg config.Config, configPath string) error {
 			Engine:     engine,
 			Loader:     dashLoader,
 			Scrape:     scrapeMgr,
-			Collectors: collectorsAdapter{host: hostCol, docker: dockerCol},
+			Collectors: collectorsAdapter{host: hostCol, docker: dockerCol, discovery: dockerDisc},
 			Containers: containersAdapter{docker: dockerCol},
 			Alerter:    alerter,
 			OnReload:   reload,
@@ -432,13 +434,14 @@ func describeListen(addr string) string {
 // nil when the corresponding collector is disabled, in which case it
 // is skipped.
 type collectorsAdapter struct {
-	host   *host.Collector
-	docker *docker.Collector
+	host      *host.Collector
+	docker    *docker.Collector
+	discovery *docker.Discovery
 }
 
 // CollectorsSnapshot returns one entry per enabled collector. Order is
-// stable: host first (when present), then docker. The web layer is
-// free to call this on every render — both underlying snapshots are
+// stable: host, docker metrics, docker discovery. The web layer is
+// free to call this on every render — all underlying snapshots are
 // cheap copies guarded by RWMutex.
 func (a collectorsAdapter) CollectorsSnapshot() []web.CollectorHealth {
 	var out []web.CollectorHealth
@@ -472,6 +475,23 @@ func (a collectorsAdapter) CollectorsSnapshot() []web.CollectorHealth {
 			Duration:       h.Duration,
 			LastError:      h.LastError,
 			LastSamples:    h.LastSamples,
+			Extra:          extra,
+		})
+	}
+	if a.discovery != nil {
+		h := a.discovery.HealthSnapshot()
+		extra := ""
+		if h.LastError == "" && !h.LastScan.IsZero() {
+			extra = fmt.Sprintf("%d of %d containers opted in", h.OptedIn, h.ContainersSeen)
+		}
+		out = append(out, web.CollectorHealth{
+			Name:           "docker-discovery",
+			Kind:           "docker_discovery",
+			Interval:       h.Interval,
+			LastCollection: h.LastScan,
+			Duration:       h.Duration,
+			LastError:      h.LastError,
+			LastSamples:    h.OptedIn,
 			Extra:          extra,
 		})
 	}
