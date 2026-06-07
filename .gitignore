@@ -22,6 +22,7 @@ coverage.txt
 
 # Local Claude Code tooling (not project source)
 .claude/
+.mcp.json
 skills-lock.json
 
 # Private/historical material not published with the repo
