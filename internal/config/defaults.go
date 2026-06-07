@@ -15,6 +15,8 @@ func Default() Config {
 				Size:     0,                   // disabled unless user opts in
 				Interval: 30 * time.Minute,
 			},
+			HeadWindow:    2 * time.Hour,
+			FlushInterval: 10 * time.Minute,
 		},
 		Scrape: ScrapeConfig{
 			DefaultInterval: 30 * time.Second,

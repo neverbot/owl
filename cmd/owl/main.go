@@ -121,6 +121,22 @@ func run(cfg config.Config, configPath string) error {
 	}
 	spawn(func() { retention.Run(ctx) })
 
+	// Chunk flusher: periodically compresses head samples older than
+	// the configured head window into Gorilla-encoded chunks. This is
+	// what turns the per-sample disk footprint from ~30 bytes (raw)
+	// down to ~3-5 bytes (compressed). See
+	// `context/decisions/2026-06-07-storage-footprint.md` for the
+	// full reasoning.
+	flusher := &storage.Flusher{
+		Store:      store,
+		HeadWindow: cfg.Storage.HeadWindow,
+		Interval:   cfg.Storage.FlushInterval,
+	}
+	spawn(func() { flusher.Run(ctx) })
+	slog.Info("chunk flusher started",
+		"head_window", cfg.Storage.HeadWindow,
+		"flush_interval", cfg.Storage.FlushInterval)
+
 	// Optional Linux host collector (/proc + /sys). Disabled by default
 	// because /proc does not exist on every platform owl might run on
 	// (macOS dev environments, distroless without bind-mounts, etc.).

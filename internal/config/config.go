@@ -20,6 +20,18 @@ type Config struct {
 type StorageConfig struct {
 	Path      string          `yaml:"path"      doc:"Filesystem path to the SQLite database file."`
 	Retention RetentionPolicy `yaml:"retention" doc:"Time- and size-based retention policy."`
+	// HeadWindow is how long recent samples stay raw before the
+	// flusher compresses them into Gorilla chunks. Shorter values
+	// reclaim disk faster; longer values keep the raw-write path
+	// (point-writable head) wider, which matters if your dashboards
+	// frequently query the last few hours at high resolution. The
+	// 2 h default mirrors Prometheus' tsdb head block.
+	HeadWindow time.Duration `yaml:"head_window" doc:"How long recent samples stay uncompressed before the chunk flusher encodes them."`
+	// FlushInterval is how often the chunk flusher runs. Default of
+	// 10 minutes batches enough samples per chunk to amortise the
+	// per-chunk header overhead while keeping recovery losses on
+	// crash bounded.
+	FlushInterval time.Duration `yaml:"flush_interval" doc:"How often the chunk flusher runs; 0 falls back to the default."`
 }
 
 // RetentionPolicy is the dual time+size policy. Both apply; whichever
