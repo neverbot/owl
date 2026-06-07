@@ -400,6 +400,15 @@ body {
   font-size: var(--fs-sm);
   max-width: 65ch;
 }
+
+/* Secondary section dividers reuse .page-title for style consistency
+   but need top breathing room: the H2 must read as "introducing the
+   section below", not "trailing the section above". H1 is the page
+   heading and stays flush. */
+h2.page-title,
+h3.page-title {
+  margin-top: var(--s-7);
+}
 .page-hint code {
   font-family: var(--font-mono);
   font-size: 0.9em;
