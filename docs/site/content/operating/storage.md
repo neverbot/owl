@@ -7,10 +7,11 @@ nav_order: 4
 owl stores time series in a single SQLite file. The schema is built
 around two ideas you will see if you open the DB: a small **head**
 that holds recent samples raw, and a larger **chunks** table that
-holds older samples in a compressed binary format. Together they
-keep the per-sample disk footprint around 9 bytes on a representative
-mix of host, docker, and self-metrics, against ~167 bytes per sample
-on the pre-compression schema.
+holds older samples in a compressed binary format. The compression
+chain — series interning, delta-of-delta timestamps, and XOR float
+values — typically lands steady-state samples in the single-digit
+bytes per sample range, low enough that days to weeks of history
+fit on a small VPS disk.
 
 ## Two phases, one file
 
@@ -104,26 +105,39 @@ When tuning:
   cost of more frequent `VACUUM` calls. Defaults are tuned for
   the small-host operator profile.
 
-## Disk footprint on a real workload
+## Disk footprint
 
-A representative seed: owl-self at 15 s, host at 5 s with per-CPU
-+ per-mode CPU + memory + load + disk + network, docker at 10 s
-across 8 containers including network and fs metrics. Two days
-of synthetic data, then a single flush + vacuum to reach steady
-state. The numbers:
+Storage cost per sample varies by where the sample currently lives
+and by the shape of the metric.
 
-| State                            | Bytes/sample | Days at 500 MB |
-|----------------------------------|--------------|----------------|
-| Legacy schema (pre-refactor)     | 166.7        | ~2             |
-| Phase 1 only (raw head)          | 34.3         | ~15            |
-| Phase 1 + 2 (after flush)        | 9.25         | ~37            |
+| Stage             | Typical bytes per sample | Why it varies |
+|-------------------|--------------------------|---------------|
+| Head (raw)        | ~25–35                   | One row each in the head table; the variance is SQLite's per-row B-tree overhead. Independent of value shape. |
+| Chunk (compressed)| ~1–10                    | Constant gauges (memory limits, build_info) approach ~1 bit per sample after the first; slow-moving counters compress to a couple of bytes; jittery gauges sit toward the high end. |
 
-These numbers will vary with cardinality (more unique series →
-worse amortisation of the series table; more redundancy across
-samples → better compression). The 9 bytes/sample figure includes
-all SQLite per-row overhead, B-tree page slack, and the series
-and chunks-row headers; it is what `du` reports, not a theoretical
-codec lower bound.
+In steady state, most samples in a mature deployment live in
+chunks, so the average bytes per sample across the full retention
+window tracks the chunk regime more than the head regime.
+
+Four levers shift the average:
+
+- **Series cardinality.** A small set of series means the `series`
+  table contributes negligibly per sample; thousands of unique
+  series amortise less efficiently.
+- **Scrape cadence regularity.** Timestamps cost ~1 bit each when
+  the cadence is constant. Irregular intervals push the
+  per-timestamp cost up.
+- **Value entropy.** Rate of change matters more than absolute
+  magnitude. A metric that hovers near a constant compresses
+  better than one that jitters.
+- **Chunk length.** The encoder caps chunks at 1000 samples;
+  longer runs amortise the per-chunk header (~30 bytes) better.
+
+Steady-state on-disk size sits around
+`bytes_per_sample × samples_per_day × retention_days`. The exact
+numbers are best measured against your own workload — install,
+collect for a few days, divide `owl_storage_size_bytes` by
+`owl_storage_samples_total`.
 
 ## Crash safety
 
@@ -148,29 +162,6 @@ in WAL during a hard crash *that loses the WAL file* (uncommon,
 generally requires losing the filesystem). On a clean SIGTERM the
 process drains and commits before exiting, so an orderly restart
 loses nothing.
-
-## What happens on upgrade
-
-owl tracks schema versions via SQLite's `PRAGMA user_version`. When
-a binary detects a database older than its current expected
-version, it **drops the old data tables and starts fresh**:
-
-```text
-WARN  incompatible storage schema; dropping all samples and starting fresh
-      old_version=0 new_version=3 samples_dropped=3247816
-```
-
-This is intentional. owl's target user runs short-lived metrics on
-a small disk; a stop-the-world rewrite of multi-GB tables on every
-schema bump is the wrong default for that profile. If you need to
-preserve historical samples across a schema bump, take a SQL dump
-before upgrading and reimport into the new schema via a script
-(none ships today; file an issue if you need one).
-
-The current schema is **version 3**: series interning + chunks
-(this document). The previous public schema was version 0
-(denormalised samples). Future bumps will follow the same lossy
-default unless the changelog explicitly says otherwise.
 
 ## Inspecting the database
 
