@@ -1,7 +1,7 @@
 ---
 title: Retention
 section: Operating
-nav_order: 3
+nav_order: 5
 ---
 
 owl stores every sample in a single SQLite database
