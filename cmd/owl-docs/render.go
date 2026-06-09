@@ -259,7 +259,7 @@ func writeFixtures(outDir string) error {
 // Pages without a section land under "Misc".
 func buildNav(pages []*Page) []NavSection {
 	const misc = "Misc"
-	byOrder := []string{"Start", "Reference", "Operating", misc}
+	byOrder := []string{"Start", "Reference", "Operating", "Updates", misc}
 	groups := map[string][]NavLink{}
 	for _, p := range pages {
 		sec := p.Frontmatter.Section
