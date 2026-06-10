@@ -1,27 +1,33 @@
 (function () {
-  const form = document.querySelector("[data-search]");
+  const form = document.querySelector('[data-search]');
   if (!form) return;
-  const input = form.querySelector("[data-search-input]");
-  const results = form.querySelector("[data-search-results]");
+  const input = form.querySelector('[data-search-input]');
+  const results = form.querySelector('[data-search-results]');
   // The base URL prefix is published in the page head by layout.html.
   // It is "" when the site is rooted at "/", or e.g. "/owl" when
   // hosted under a GitHub Pages subdirectory.
   const baseMeta = document.querySelector('meta[name="owl-docs-base"]');
-  const base = (baseMeta && baseMeta.getAttribute("content")) || "";
+  const base = baseMeta?.getAttribute('content') || '';
   let index = null;
   let loadStarted = false;
 
   function loadIndex() {
     if (loadStarted) return;
     loadStarted = true;
-    fetch(base + "/search-index.json")
+    fetch(base + '/search-index.json')
       .then((r) => r.json())
-      .then((data) => { index = data; render(input.value); })
+      .then((data) => {
+        index = data;
+        render(input.value);
+      })
       .catch(() => {});
   }
 
   function tokenise(q) {
-    return q.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    return q
+      .toLowerCase()
+      .split(/[^\p{L}\p{N}]+/u)
+      .filter(Boolean);
   }
 
   function rank(record, tokens) {
@@ -38,7 +44,7 @@
   }
 
   function escRegex(s) {
-    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   function excerpt(text, hit) {
@@ -46,8 +52,8 @@
     const start = Math.max(0, hit - Math.floor(window / 3));
     const end = Math.min(text.length, start + window);
     let out = text.slice(start, end);
-    if (start > 0) out = "… " + out;
-    if (end < text.length) out = out + " …";
+    if (start > 0) out = '… ' + out;
+    if (end < text.length) out = out + ' …';
     return out;
   }
 
@@ -56,8 +62,8 @@
   // the first-paragraph snippet when the verbatim query is absent, so
   // pure-token matches keep showing their familiar opening sentence.
   function pickSnippet(record, query, tokens) {
-    const snippet = record.snippet || "";
-    const body = record.body || "";
+    const snippet = record.snippet || '';
+    const body = record.body || '';
     const q = query.trim().toLowerCase();
     if (q) {
       if (snippet.toLowerCase().includes(q)) return snippet;
@@ -78,11 +84,8 @@
   }
 
   function highlight(snippet, query, tokens) {
-    if (!snippet) return "";
-    let escaped = snippet
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+    if (!snippet) return '';
+    let escaped = snippet.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const marks = [];
     const q = query.trim();
     if (q) marks.push(q);
@@ -97,8 +100,8 @@
       kept.push(m);
     }
     for (const m of kept) {
-      const re = new RegExp("(" + escRegex(m) + ")", "ig");
-      escaped = escaped.replace(re, "<mark>$1</mark>");
+      const re = new RegExp('(' + escRegex(m) + ')', 'ig');
+      escaped = escaped.replace(re, '<mark>$1</mark>');
     }
     return escaped;
   }
@@ -106,7 +109,7 @@
   function render(query) {
     if (!index || !query.trim()) {
       results.hidden = true;
-      results.innerHTML = "";
+      results.innerHTML = '';
       return;
     }
     const tokens = tokenise(query);
@@ -127,29 +130,29 @@
       .map(({ r }) => {
         const snippet = pickSnippet(r, query, tokens);
         return `<a class="search__result" href="${r.url}">
-           <div class="search__crumb">${r.breadcrumb || ""}${r.breadcrumb ? " · " : ""}<strong>${r.title}</strong></div>
+           <div class="search__crumb">${r.breadcrumb || ''}${r.breadcrumb ? ' · ' : ''}<strong>${r.title}</strong></div>
            <div class="search__snippet">${highlight(snippet, query, tokens)}</div>
          </a>`;
       })
-      .join("");
+      .join('');
   }
 
-  input.addEventListener("focus", loadIndex);
-  input.addEventListener("input", () => render(input.value));
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      input.value = "";
+  input.addEventListener('focus', loadIndex);
+  input.addEventListener('input', () => render(input.value));
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      input.value = '';
       input.blur();
-      render("");
+      render('');
     }
   });
-  document.addEventListener("keydown", (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
       e.preventDefault();
       input.focus();
     }
   });
-  document.addEventListener("click", (e) => {
+  document.addEventListener('click', (e) => {
     if (!form.contains(e.target)) {
       results.hidden = true;
     }
