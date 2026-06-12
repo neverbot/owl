@@ -4,7 +4,7 @@
 //   2. Per-panel polling and chart rendering.
 //   3. Hover interactions (crosshair + tooltip) over the chart.
 
-(function () {
+(() => {
   // ────────────────────────────────────────────────────────────────────────
   // Theme
 
@@ -25,7 +25,7 @@
   function bindThemeToggle() {
     var btn = document.querySelector('[data-theme-toggle]');
     if (!btn) return;
-    btn.addEventListener('click', function () {
+    btn.addEventListener('click', () => {
       setTheme(currentTheme() === 'dark' ? 'light' : 'dark');
     });
   }
@@ -110,13 +110,11 @@
   // are distinct. Caps at 3 decimals; collisions beyond that are
   // accepted (very tight ranges become meaningless anyway).
   function formatTicks(values, unit) {
-    for (var p = 0; p <= 3; p++) {
-      var labels = values.map(function (v) {
-        return fmtTickAt(v, unit, p);
-      });
-      var seen = {},
-        dup = false;
-      for (var i = 0; i < labels.length; i++) {
+    for (let p = 0; p <= 3; p++) {
+      const labels = values.map((v) => fmtTickAt(v, unit, p));
+      const seen = {};
+      let dup = false;
+      for (let i = 0; i < labels.length; i++) {
         if (seen[labels[i]]) {
           dup = true;
           break;
@@ -125,9 +123,7 @@
       }
       if (!dup) return labels;
     }
-    return values.map(function (v) {
-      return fmtTickAt(v, unit, 3);
-    });
+    return values.map((v) => fmtTickAt(v, unit, 3));
   }
 
   // "5m 12s ago" / "12s ago" / "now"
@@ -249,20 +245,16 @@
   function fetchRange() {
     if (rangeCache) return Promise.resolve(rangeCache);
     return fetch('/api/range')
-      .then(function (r) {
-        return r.ok ? r.json() : { min_ts: null, max_ts: null };
-      })
-      .then(function (body) {
+      .then((r) => (r.ok ? r.json() : { min_ts: null, max_ts: null }))
+      .then((body) => {
         rangeCache = body;
         return body;
       })
-      .catch(function () {
-        return { min_ts: null, max_ts: null };
-      });
+      .catch(() => ({ min_ts: null, max_ts: null }));
   }
 
   function repaintAll() {
-    document.querySelectorAll('.panel').forEach(function (p) {
+    document.querySelectorAll('.panel').forEach((p) => {
       if (p.dataset.status !== 'unsupported') refreshPanel(p);
     });
   }
@@ -312,33 +304,33 @@
     var sel = document.querySelector('[data-range]');
     if (sel) {
       sel.value = currentWindowKey();
-      sel.addEventListener('change', function () {
+      sel.addEventListener('change', () => {
         setWindow(sel.value);
       });
     }
     var anchorBtn = document.querySelector('[data-anchor-open]');
     if (anchorBtn)
-      anchorBtn.addEventListener('click', function (ev) {
+      anchorBtn.addEventListener('click', (ev) => {
         ev.preventDefault();
         openCalendar(anchorBtn);
       });
     var prev = document.querySelector('[data-anchor-prev]');
     if (prev)
-      prev.addEventListener('click', function () {
+      prev.addEventListener('click', () => {
         stepAnchor(-1);
       });
     var next = document.querySelector('[data-anchor-next]');
     if (next)
-      next.addEventListener('click', function () {
+      next.addEventListener('click', () => {
         stepAnchor(+1);
       });
     var nowBtn = document.querySelector('[data-anchor-now]');
     if (nowBtn)
-      nowBtn.addEventListener('click', function () {
+      nowBtn.addEventListener('click', () => {
         setAnchor(null);
       });
 
-    document.addEventListener('keydown', function (e) {
+    document.addEventListener('keydown', (e) => {
       if (e.target && /^(input|select|textarea)$/i.test(e.target.tagName)) return;
       if (e.key === 'ArrowLeft') {
         stepAnchor(-1);
@@ -365,7 +357,7 @@
     var viewing = new Date(anchor === null ? Date.now() : anchor);
     viewing.setDate(1);
 
-    fetchRange().then(function (range) {
+    fetchRange().then((range) => {
       renderCalendar(pop, viewing, range, anchorEl);
     });
 
@@ -374,7 +366,7 @@
     pop.style.left = window.scrollX + rect.left + 'px';
     document.body.appendChild(pop);
 
-    setTimeout(function () {
+    setTimeout(() => {
       document.addEventListener('click', outsideClick, true);
       document.addEventListener('keydown', escClose, true);
     }, 0);
@@ -387,7 +379,7 @@
     function escClose(e) {
       if (e.key === 'Escape') closeCalendar();
     }
-    pop._cleanup = function () {
+    pop._cleanup = () => {
       document.removeEventListener('click', outsideClick, true);
       document.removeEventListener('keydown', escClose, true);
     };
@@ -412,7 +404,7 @@
     var prevBtn = document.createElement('button');
     prevBtn.type = 'button';
     prevBtn.textContent = '‹';
-    prevBtn.addEventListener('click', function () {
+    prevBtn.addEventListener('click', () => {
       var v = new Date(viewing);
       v.setMonth(v.getMonth() - 1);
       renderCalendar(pop, v, range, anchorEl);
@@ -423,7 +415,7 @@
     var nextBtn = document.createElement('button');
     nextBtn.type = 'button';
     nextBtn.textContent = '›';
-    nextBtn.addEventListener('click', function () {
+    nextBtn.addEventListener('click', () => {
       var v = new Date(viewing);
       v.setMonth(v.getMonth() + 1);
       renderCalendar(pop, v, range, anchorEl);
@@ -437,15 +429,15 @@
     grid.className = 'time-nav__grid';
 
     var dow = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    for (var i = 0; i < 7; i++) {
-      var h = document.createElement('div');
+    for (let i = 0; i < 7; i++) {
+      const h = document.createElement('div');
       h.className = 'time-nav__dow';
       h.textContent = dow[i];
       grid.appendChild(h);
     }
 
     var firstDow = (viewing.getDay() + 6) % 7; // Mon=0
-    for (var p = 0; p < firstDow; p++) {
+    for (let p = 0; p < firstDow; p++) {
       grid.appendChild(document.createElement('div'));
     }
 
@@ -459,39 +451,37 @@
     var todayKey = isoDate(today);
     var anchorKey = currentAnchor() !== null ? isoDate(new Date(currentAnchor())) : null;
 
-    for (var d = 1; d <= 31; d++) {
-      var dt = new Date(year, month, d);
+    for (let d = 1; d <= 31; d++) {
+      const dt = new Date(year, month, d);
       if (dt.getMonth() !== month) break;
-      var cell = document.createElement('button');
+      const cell = document.createElement('button');
       cell.type = 'button';
       cell.className = 'time-nav__day';
       cell.textContent = String(d);
-      var key = isoDate(dt);
-      var disabled = !minDate || dt < startOfDay(minDate) || dt > endOfDay(maxDate || today);
+      const key = isoDate(dt);
+      const disabled = !minDate || dt < startOfDay(minDate) || dt > endOfDay(maxDate || today);
       if (disabled) cell.setAttribute('disabled', '');
       if (key === todayKey) cell.setAttribute('data-today', '');
       if (anchorKey && key === anchorKey) cell.setAttribute('data-current', '');
       cell.addEventListener(
         'click',
-        (function (selected) {
-          return function () {
-            if (sameDay(selected, new Date())) {
-              setAnchor(null);
-            } else {
-              var clock = new Date();
-              var projected = new Date(
-                selected.getFullYear(),
-                selected.getMonth(),
-                selected.getDate(),
-                clock.getHours(),
-                clock.getMinutes(),
-                clock.getSeconds(),
-                0,
-              );
-              setAnchor(projected.getTime());
-            }
-            closeCalendar();
-          };
+        ((selected) => () => {
+          if (sameDay(selected, new Date())) {
+            setAnchor(null);
+          } else {
+            const clock = new Date();
+            const projected = new Date(
+              selected.getFullYear(),
+              selected.getMonth(),
+              selected.getDate(),
+              clock.getHours(),
+              clock.getMinutes(),
+              clock.getSeconds(),
+              0,
+            );
+            setAnchor(projected.getTime());
+          }
+          closeCalendar();
         })(dt),
       );
       grid.appendChild(cell);
@@ -569,10 +559,10 @@
       maxX = -Infinity,
       minY = Infinity,
       maxY = -Infinity;
-    for (var i = 0; i < seriesList.length; i++) {
-      var pts = seriesList[i].points;
-      for (var j = 0; j < pts.length; j++) {
-        var px = pts[j][0],
+    for (let i = 0; i < seriesList.length; i++) {
+      const pts = seriesList[i].points;
+      for (let j = 0; j < pts.length; j++) {
+        const px = pts[j][0],
           py = pts[j][1];
         if (px < minX) minX = px;
         if (px > maxX) maxX = px;
@@ -618,9 +608,9 @@
     // Y gridlines and labels.
     var yTicks = [yLo, (yLo + yHi) / 2, yHi];
     var yLabels = formatTicks(yTicks, unit);
-    for (var t = 0; t < yTicks.length; t++) {
-      var yv = yTicks[t];
-      var py2 = sy(yv);
+    for (let t = 0; t < yTicks.length; t++) {
+      const yv = yTicks[t];
+      const py2 = sy(yv);
       svg.appendChild(
         el('line', {
           x1: PAD.left,
@@ -657,9 +647,9 @@
     // X tick labels — 3 evenly spaced positions show relative time.
     var nowMs = maxX;
     var xTicks = [minX, (minX + maxX) / 2, maxX];
-    for (var ti = 0; ti < xTicks.length; ti++) {
-      var xv = xTicks[ti];
-      var anchor = ti === 0 ? 'start' : ti === 2 ? 'end' : 'middle';
+    for (let ti = 0; ti < xTicks.length; ti++) {
+      const xv = xTicks[ti];
+      const anchor = ti === 0 ? 'start' : ti === 2 ? 'end' : 'middle';
       svg.appendChild(
         el(
           'text',
@@ -675,15 +665,15 @@
     }
 
     // Series paths and markers.
-    for (var s = 0; s < seriesList.length; s++) {
-      var slot = (s % SERIES_PALETTE_SIZE) + 1;
-      var pp = seriesList[s].points;
-      var d = '';
-      for (var p = 0; p < pp.length; p++) {
+    for (let s = 0; s < seriesList.length; s++) {
+      const slot = (s % SERIES_PALETTE_SIZE) + 1;
+      const pp = seriesList[s].points;
+      let d = '';
+      for (let p = 0; p < pp.length; p++) {
         d += (p === 0 ? 'M' : 'L') + sx(pp[p][0]).toFixed(1) + ',' + sy(pp[p][1]).toFixed(1);
       }
       svg.appendChild(el('path', { d: d, class: 'series series--' + slot }));
-      var last = pp[pp.length - 1];
+      const last = pp[pp.length - 1];
       svg.appendChild(
         el('circle', {
           cx: sx(last[0]).toFixed(1),
@@ -748,7 +738,7 @@
     var lo = 0,
       hi = points.length - 1;
     while (lo < hi) {
-      var mid = (lo + hi) >>> 1;
+      const mid = (lo + hi) >>> 1;
       if (points[mid][0] < cursorMs) lo = mid + 1;
       else hi = mid;
     }
@@ -769,21 +759,16 @@
   function labelFor(ser, legendTemplate) {
     var labels = ser.labels || {};
     if (legendTemplate) {
-      return legendTemplate.replace(/\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g, function (_, k) {
-        return labels[k] || '';
-      });
+      return legendTemplate.replace(
+        /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g,
+        (_, k) => labels[k] || '',
+      );
     }
-    var keys = Object.keys(labels).filter(function (k) {
-      return k !== 'job' && k !== 'instance';
-    });
+    var keys = Object.keys(labels).filter((k) => k !== 'job' && k !== 'instance');
     if (keys.length === 0) keys = Object.keys(labels);
     if (keys.length === 0) return ser.metric;
     if (keys.length === 1) return labels[keys[0]];
-    return keys
-      .map(function (k) {
-        return k + '=' + labels[k];
-      })
-      .join(' ');
+    return keys.map((k) => k + '=' + labels[k]).join(' ');
   }
 
   function renderHover(svg, cursorMs) {
@@ -809,13 +794,13 @@
 
     // For each series, find the nearest data point and stamp a circle.
     var rows = [];
-    for (var i = 0; i < state.seriesList.length; i++) {
-      var s = state.seriesList[i];
+    for (let i = 0; i < state.seriesList.length; i++) {
+      const s = state.seriesList[i];
       if (!s.points?.length) continue;
-      var idx = nearestIndex(s.points, clampedMs);
+      const idx = nearestIndex(s.points, clampedMs);
       if (idx < 0) continue;
-      var pt = s.points[idx];
-      var slot = (i % SERIES_PALETTE_SIZE) + 1;
+      const pt = s.points[idx];
+      const slot = (i % SERIES_PALETTE_SIZE) + 1;
       hoverLayer.appendChild(
         el('circle', {
           cx: state.sx(pt[0]).toFixed(1),
@@ -830,9 +815,7 @@
 
     // Sort by value descending so the tooltip rows match the visual
     // top-to-bottom order of the lines at the cursor position.
-    rows.sort(function (a, b) {
-      return b.value - a.value;
-    });
+    rows.sort((a, b) => b.value - a.value);
 
     // Tooltip — header (timestamp) + one row per series.
     var headerTs = rows[0].ts;
@@ -846,13 +829,13 @@
 
     // Measure rough width using a probe text element.
     var lines = [fmtTime(headerTs)];
-    for (var r = 0; r < rows.length; r++) {
-      var prefix = multi ? rows[r].label + '  ' : '';
+    for (let r = 0; r < rows.length; r++) {
+      const prefix = multi ? rows[r].label + '  ' : '';
       lines.push(prefix + fmt(rows[r].value, state.unit));
     }
     var charW = 6.2; // ~ width of mono char at 10px
     var widest = 0;
-    for (var li = 0; li < lines.length; li++) {
+    for (let li = 0; li < lines.length; li++) {
       if (lines[li].length > widest) widest = lines[li].length;
     }
     var bgW = Math.ceil(widest * charW) + (multi ? swatchW + swatchGap : 0) + rowPadX * 2;
@@ -889,9 +872,9 @@
     );
 
     // Rows.
-    for (var rr = 0; rr < rows.length; rr++) {
-      var ry = bgY + rowPadY + headerH + rr * rowH + 9;
-      var rx = bgX + rowPadX;
+    for (let rr = 0; rr < rows.length; rr++) {
+      const ry = bgY + rowPadY + headerH + rr * rowH + 9;
+      let rx = bgX + rowPadX;
       if (multi) {
         hoverLayer.appendChild(
           el('rect', {
@@ -932,7 +915,7 @@
   }
 
   function bindChartInteractions(svg) {
-    svg.addEventListener('mousemove', function (evt) {
+    svg.addEventListener('mousemove', (evt) => {
       var pt = eventToSvg(svg, evt);
       if (!pt) return;
       var state = panelStates.get(svg);
@@ -942,7 +925,7 @@
       state.cursorMs = ts;
       renderHover(svg, ts);
     });
-    svg.addEventListener('mouseleave', function () {
+    svg.addEventListener('mouseleave', () => {
       var state = panelStates.get(svg);
       if (state) state.cursorMs = null;
       var layer = svg.querySelector('.hover-layer');
@@ -980,14 +963,10 @@
         step;
 
     fetch(url)
-      .then(function (resp) {
-        return resp.ok ? resp.json() : null;
-      })
-      .then(function (body) {
+      .then((resp) => (resp.ok ? resp.json() : null))
+      .then((body) => {
         if (!body) return;
-        var seriesList = (body.series || []).filter(function (s) {
-          return s?.points && s.points.length > 0;
-        });
+        var seriesList = (body.series || []).filter((s) => s?.points && s.points.length > 0);
         var legendTemplate = panel.dataset.legend || '';
 
         var svg = panel.querySelector('.panel__chart');
@@ -1007,18 +986,18 @@
           // single series. In multi-series panels we'd be picking one
           // arbitrarily — the legend already carries that info, so we
           // hide the readout entirely and let the chart speak.
-          var multi = seriesList.length > 1;
+          const multi = seriesList.length > 1;
           valueEl.classList.toggle('panel__value--hidden', multi);
           if (!multi) {
-            var first = seriesList[0];
-            var lastPt = first ? first.points[first.points.length - 1] : null;
-            var v = lastPt ? lastPt[1] : null;
+            const first = seriesList[0];
+            const lastPt = first ? first.points[first.points.length - 1] : null;
+            const v = lastPt ? lastPt[1] : null;
             valueEl.textContent = fmt(v, unit);
             valueEl.classList.toggle('panel__value--placeholder', v === null);
           }
         }
       })
-      .catch(function () {
+      .catch(() => {
         /* network error — keep last render */
       });
   }
@@ -1026,15 +1005,15 @@
   function renderLegend(legendEl, seriesList, legendTemplate) {
     clearChildren(legendEl);
     if (seriesList.length <= 1) return;
-    for (var i = 0; i < seriesList.length; i++) {
-      var slot = (i % SERIES_PALETTE_SIZE) + 1;
-      var item = document.createElement('span');
+    for (let i = 0; i < seriesList.length; i++) {
+      const slot = (i % SERIES_PALETTE_SIZE) + 1;
+      const item = document.createElement('span');
       item.className = 'panel__legend-item';
-      var swatch = document.createElement('span');
+      const swatch = document.createElement('span');
       swatch.className = 'panel__legend-swatch';
       swatch.style.background = 'var(--series-' + slot + ')';
       item.appendChild(swatch);
-      var label = document.createElement('span');
+      const label = document.createElement('span');
       label.textContent = labelFor(seriesList[i], legendTemplate);
       item.appendChild(label);
       legendEl.appendChild(item);
@@ -1042,7 +1021,7 @@
   }
 
   function schedulePanels() {
-    document.querySelectorAll('.panel').forEach(function (panel) {
+    document.querySelectorAll('.panel').forEach((panel) => {
       if (panel.dataset.status === 'unsupported') return;
       var svg = panel.querySelector('.panel__chart');
       if (svg) bindChartInteractions(svg);

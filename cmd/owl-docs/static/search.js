@@ -1,4 +1,4 @@
-(function () {
+(() => {
   const form = document.querySelector('[data-search]');
   if (!form) return;
   const input = form.querySelector('[data-search-input]');
