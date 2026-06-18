@@ -1,7 +1,7 @@
 ---
 title: Storage
 section: Operating
-nav_order: 4
+nav_order: 5
 ---
 
 owl stores time series in a single SQLite file. The schema is built

@@ -8,6 +8,10 @@ The `/targets` page is owl's live view of where data is coming from
 right now. Three sections, each rendered only when its source is
 configured.
 
+Targets that need credentials (bearer token, Basic auth, custom
+headers) are configured via the optional `auth` block — see
+[Authentication](authentication.md) for the full surface.
+
 ## Scrape targets
 
 HTTP endpoints owl pulls on a schedule. One row per target, with the
