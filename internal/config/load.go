@@ -14,40 +14,63 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Load reads a YAML file at path, merges it on top of Default(), and
-// validates the result. Unknown fields are rejected so typos surface.
+// Load reads a YAML file at path, expands ${VAR}/file: secrets,
+// merges the result on top of Default(), and validates it. Unknown
+// fields are rejected so typos surface.
 func Load(path string) (Config, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return Config{}, fmt.Errorf("read config: %w", err)
 	}
-
-	c := Default()
-	dec := yaml.NewDecoder(bytes.NewReader(raw))
-	dec.KnownFields(true)
-	if err := dec.Decode(&c); err != nil && !errors.Is(err, io.EOF) {
-		return Config{}, fmt.Errorf("parse config %s: %w", path, err)
-	}
-
-	if err := Validate(&c); err != nil {
-		return Config{}, fmt.Errorf("invalid config %s: %w", path, err)
+	c, err := loadFromBytes(raw, defaultEnv(), defaultRead())
+	if err != nil {
+		return Config{}, fmt.Errorf("config %s: %w", path, err)
 	}
 	return c, nil
 }
 
-// LoadBytes is Load that takes an in-memory YAML payload rather than a
-// path. It applies Default(), unmarshals strictly (unknown fields
-// rejected), then validates. Used by docs validation to parse inline
-// configuration examples.
+// LoadBytes is Load that takes an in-memory YAML payload rather than
+// a path. It applies Default(), expands ${VAR}/file: secrets,
+// unmarshals strictly, then validates. Used by docs validation to
+// parse inline examples.
 func LoadBytes(data []byte) (Config, error) {
+	return loadFromBytes(data, defaultEnv(), defaultRead())
+}
+
+// loadFromBytes is the common path used by Load and LoadBytes. It
+// parses the YAML into a node tree, expands every string scalar via
+// expandNode, re-marshals to bytes, and finally decodes strictly
+// into a Config so KnownFields(true) still rejects typos. Failing to
+// re-marshal is unreachable in practice — we just round-tripped from
+// a valid node — but we propagate it for completeness.
+func loadFromBytes(data []byte, env func(string) (string, bool), read func(string) ([]byte, error)) (Config, error) {
 	c := Default()
-	dec := yaml.NewDecoder(bytes.NewReader(data))
-	dec.KnownFields(true)
-	if err := dec.Decode(&c); err != nil && !errors.Is(err, io.EOF) {
-		return Config{}, fmt.Errorf("parse config: %w", err)
+	if len(data) == 0 {
+		if err := Validate(&c); err != nil {
+			return Config{}, fmt.Errorf("invalid: %w", err)
+		}
+		return c, nil
+	}
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return Config{}, fmt.Errorf("parse: %w", err)
+	}
+	if err := expandNode(&doc, env, read); err != nil {
+		return Config{}, err
+	}
+	if doc.Kind != 0 {
+		expanded, err := yaml.Marshal(&doc)
+		if err != nil {
+			return Config{}, fmt.Errorf("re-marshal: %w", err)
+		}
+		dec := yaml.NewDecoder(bytes.NewReader(expanded))
+		dec.KnownFields(true)
+		if err := dec.Decode(&c); err != nil && !errors.Is(err, io.EOF) {
+			return Config{}, fmt.Errorf("decode: %w", err)
+		}
 	}
 	if err := Validate(&c); err != nil {
-		return Config{}, fmt.Errorf("invalid config: %w", err)
+		return Config{}, fmt.Errorf("invalid: %w", err)
 	}
 	return c, nil
 }

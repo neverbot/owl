@@ -186,3 +186,44 @@ func TestLoadEmptyFileUsesDefaults(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadBytes_ExpandsEnv(t *testing.T) {
+	t.Setenv("OWL_TEST_LISTEN", "127.0.0.1:9090")
+	data := []byte(`
+listen: ${OWL_TEST_LISTEN}
+storage:
+  path: /tmp/owl.db
+  retention:
+    time: 1h
+    size: 100MB
+    interval: 1m
+scrape:
+  default_interval: 30s
+  default_timeout: 10s
+`)
+	c, err := LoadBytes(data)
+	if err != nil {
+		t.Fatalf("LoadBytes: %v", err)
+	}
+	if c.Listen != "127.0.0.1:9090" {
+		t.Fatalf("want listen 127.0.0.1:9090, got %q", c.Listen)
+	}
+}
+
+func TestLoadBytes_MissingEnvFails(t *testing.T) {
+	data := []byte(`
+listen: ${OWL_MISSING_TEST_VAR}
+storage:
+  path: /tmp/owl.db
+  retention:
+    time: 1h
+    size: 100MB
+    interval: 1m
+scrape:
+  default_interval: 30s
+  default_timeout: 10s
+`)
+	if _, err := LoadBytes(data); err == nil {
+		t.Fatal("expected error for missing variable")
+	}
+}
