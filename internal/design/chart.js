@@ -1055,8 +1055,9 @@
   // and writes it to the .panel__stat-value node. Multi-series queries
   // pick the first series only — stat panels are a one-number idiom.
   function refreshStat(panel) {
+    const staticSrc = panel.dataset.static;
     const expr = panel.dataset.expr;
-    if (!expr) return;
+    if (!staticSrc && !expr) return;
     const unit = panel.dataset.unit || '';
     const calc = panel.dataset.calc || 'lastNotNull';
     const decimalsAttr = panel.dataset.decimals;
@@ -1065,15 +1066,16 @@
     const to = effectiveTo();
     const from = to - currentWindowMs();
     const step = effectiveStepMs();
-    const url =
-      '/api/query?expr=' +
-      encodeURIComponent(expr) +
-      '&from=' +
-      from +
-      '&to=' +
-      to +
-      '&step=' +
-      step;
+    const url = staticSrc
+      ? staticSrc
+      : '/api/query?expr=' +
+        encodeURIComponent(expr) +
+        '&from=' +
+        from +
+        '&to=' +
+        to +
+        '&step=' +
+        step;
     fetch(url)
       .then((resp) => (resp.ok ? resp.json() : null))
       .then((body) => {
@@ -1084,6 +1086,7 @@
         writeStatValue(panel, value, unit, decimals);
         if (panel.dataset.graphMode === 'area') {
           drawSparkline(panel, first ? first.points : []);
+          bindSparklineHover(panel, first ? first.points : [], unit, decimals);
         }
       })
       .catch(() => {
@@ -1091,17 +1094,25 @@
       });
   }
 
-  // drawSparkline paints a thin, low-opacity line across the bottom
-  // half of the panel. The data domain is the same one the value was
-  // reduced from. Empty / single-point series clear the SVG so a
-  // previous render does not linger.
+  // Plot-region padding inside the sparkline SVG. Axis labels live in
+  // the gutters; the series + scrubber stay inside the plot rectangle.
+  const SPARK_PAD_LEFT = 30;
+  const SPARK_PAD_RIGHT = 6;
+  const SPARK_PAD_TOP = 6;
+  const SPARK_PAD_BOTTOM = 14;
+
+  // drawSparkline paints the secondary chart below the stat headline
+  // when graphMode === 'area'. It carries Y/X axis ticks (min/max
+  // value, span start / "now") so the line is readable without
+  // hovering, and serves as the scrubber area bindSparklineHover
+  // reads from.
   function drawSparkline(panel, points) {
     const svg = panel.querySelector('.panel__sparkline');
     if (!svg) return;
     clearChildren(svg);
     if (!points || points.length < 2) return;
     const width = svg.clientWidth || 200;
-    const height = svg.clientHeight || 40;
+    const height = svg.clientHeight || 80;
     const xs = [];
     const ys = [];
     for (let i = 0; i < points.length; i++) {
@@ -1116,19 +1127,172 @@
     const ymin = Math.min.apply(null, ys);
     const ymax = Math.max.apply(null, ys);
     if (xmax === xmin) return;
+    const xspan = xmax - xmin;
     const yspan = ymax - ymin || 1;
-    let path = 'M';
-    for (let j = 0; j < xs.length; j++) {
-      const px = ((xs[j] - xmin) / (xmax - xmin)) * width;
-      const py = height - ((ys[j] - ymin) / yspan) * height;
-      path += (j === 0 ? '' : ' L') + px.toFixed(1) + ',' + py.toFixed(1);
-    }
+    const plotW = Math.max(1, width - SPARK_PAD_LEFT - SPARK_PAD_RIGHT);
+    const plotH = Math.max(1, height - SPARK_PAD_TOP - SPARK_PAD_BOTTOM);
+
     svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
     svg.setAttribute('preserveAspectRatio', 'none');
+
+    const unit = panel.dataset.unit || '';
+    const decimalsAttr = panel.dataset.decimals;
+    const decimals =
+      decimalsAttr === '' || decimalsAttr === undefined ? null : parseInt(decimalsAttr, 10);
+
+    appendAxisText(
+      svg,
+      SPARK_PAD_LEFT - 4,
+      SPARK_PAD_TOP + 4,
+      'axis-tick axis-tick--y',
+      formatStatValue(ymax, unit, decimals),
+    );
+    appendAxisText(
+      svg,
+      SPARK_PAD_LEFT - 4,
+      SPARK_PAD_TOP + plotH,
+      'axis-tick axis-tick--y',
+      formatStatValue(ymin, unit, decimals),
+    );
+    appendAxisText(svg, SPARK_PAD_LEFT, height - 3, 'axis-tick axis-tick--x', fmtRelative(xspan));
+    appendAxisText(
+      svg,
+      width - SPARK_PAD_RIGHT,
+      height - 3,
+      'axis-tick axis-tick--x axis-tick--x-end',
+      'now',
+    );
+
+    let path = 'M';
+    for (let j = 0; j < xs.length; j++) {
+      const px = SPARK_PAD_LEFT + ((xs[j] - xmin) / xspan) * plotW;
+      const py = SPARK_PAD_TOP + plotH - ((ys[j] - ymin) / yspan) * plotH;
+      path += (j === 0 ? '' : ' L') + px.toFixed(1) + ',' + py.toFixed(1);
+    }
     const el = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     el.setAttribute('class', 'series');
     el.setAttribute('d', path);
     svg.appendChild(el);
+  }
+
+  function appendAxisText(svg, x, y, cls, text) {
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    t.setAttribute('class', cls);
+    t.setAttribute('x', String(x));
+    t.setAttribute('y', String(y));
+    t.textContent = text;
+    svg.appendChild(t);
+  }
+
+  // bindSparklineHover wires the panel body to act as a mini-scrubber:
+  // mousemove maps the cursor x to the nearest sample, rewrites the
+  // headline value to that sample's number, writes a time delta
+  // (relative to the most recent sample, so the right edge reads as
+  // "now") to .panel__stat-time, and draws a vertical line on the
+  // sparkline. mouseleave restores the reduced value and clears the
+  // scrubber.
+  function bindSparklineHover(panel, points, unit, decimals) {
+    const cell = panel.querySelector('.panel__stat');
+    const svg = panel.querySelector('.panel__sparkline');
+    const valueEl = panel.querySelector('.panel__stat-value');
+    const timeEl = panel.querySelector('.panel__stat-time');
+    if (!cell || !svg || !valueEl || !timeEl) return;
+    if (!points || points.length < 2) return;
+    const usable = points.filter((p) => p[1] !== null && p[1] !== undefined && !Number.isNaN(p[1]));
+    if (usable.length < 2) return;
+    const reducedText = valueEl.textContent;
+    const reducedPlaceholder = valueEl.classList.contains('panel__stat-value--placeholder');
+    const lastTS = usable[usable.length - 1][0];
+    const xmin = usable[0][0];
+    const xmax = lastTS;
+    const xspan = xmax - xmin || 1;
+
+    const onMove = (e) => {
+      const rect = svg.getBoundingClientRect();
+      // Map screen-x to the plot region (axis gutters excluded).
+      // viewBox stretches with preserveAspectRatio="none", so the
+      // ratio between viewBox and rect widths is constant.
+      const vb = svg.getAttribute('viewBox');
+      const vbW = vb ? Number(vb.split(/\s+/)[2]) || rect.width : rect.width;
+      const padL = (SPARK_PAD_LEFT / vbW) * rect.width;
+      const padR = (SPARK_PAD_RIGHT / vbW) * rect.width;
+      let frac = (e.clientX - rect.left - padL) / Math.max(1, rect.width - padL - padR);
+      if (frac < 0) frac = 0;
+      if (frac > 1) frac = 1;
+      // Pick the sample nearest to the cursor x in time space.
+      const targetTS = xmin + frac * xspan;
+      let best = 0;
+      let bestDist = Math.abs(usable[0][0] - targetTS);
+      for (let i = 1; i < usable.length; i++) {
+        const d = Math.abs(usable[i][0] - targetTS);
+        if (d < bestDist) {
+          bestDist = d;
+          best = i;
+        }
+      }
+      const [ts, v] = usable[best];
+      valueEl.textContent = formatStatValue(v, unit, decimals);
+      valueEl.classList.remove('panel__stat-value--placeholder');
+      valueEl.classList.add('panel__stat-value--hover');
+      timeEl.textContent = fmtRelative(lastTS - ts);
+      timeEl.classList.add('panel__stat-time--shown');
+      drawSparklineScrubber(svg, usable, best);
+    };
+    const onLeave = () => {
+      valueEl.textContent = reducedText;
+      valueEl.classList.remove('panel__stat-value--hover');
+      if (reducedPlaceholder) valueEl.classList.add('panel__stat-value--placeholder');
+      timeEl.classList.remove('panel__stat-time--shown');
+      clearSparklineScrubber(svg);
+    };
+    // Replace any previous listeners (refreshStat may fire repeatedly).
+    cell.onmousemove = onMove;
+    cell.onmouseleave = onLeave;
+  }
+
+  // drawSparklineScrubber stamps a dashed vertical crosshair at the
+  // hovered sample's x and a circular hover-point where it intersects
+  // the series. Visuals match the multi-series chart's crosshair +
+  // hover-point convention so stat sparklines feel like a small chart.
+  function drawSparklineScrubber(svg, usable, idx) {
+    clearSparklineScrubber(svg);
+    const vb = svg.getAttribute('viewBox');
+    if (!vb) return;
+    const parts = vb.split(/\s+/).map(Number);
+    if (parts.length < 4) return;
+    const width = parts[2];
+    const height = parts[3];
+    const plotW = Math.max(1, width - SPARK_PAD_LEFT - SPARK_PAD_RIGHT);
+    const plotH = Math.max(1, height - SPARK_PAD_TOP - SPARK_PAD_BOTTOM);
+    const xmin = usable[0][0];
+    const xmax = usable[usable.length - 1][0];
+    const span = xmax - xmin || 1;
+    const ys = usable.map((p) => p[1]);
+    const ymin = Math.min.apply(null, ys);
+    const ymax = Math.max.apply(null, ys);
+    const yspan = ymax - ymin || 1;
+    const [ts, v] = usable[idx];
+    const x = SPARK_PAD_LEFT + ((ts - xmin) / span) * plotW;
+    const y = SPARK_PAD_TOP + plotH - ((v - ymin) / yspan) * plotH;
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('class', 'crosshair');
+    line.setAttribute('x1', x.toFixed(1));
+    line.setAttribute('x2', x.toFixed(1));
+    line.setAttribute('y1', String(SPARK_PAD_TOP));
+    line.setAttribute('y2', String(SPARK_PAD_TOP + plotH));
+    svg.appendChild(line);
+    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    dot.setAttribute('class', 'hover-point');
+    dot.setAttribute('cx', x.toFixed(1));
+    dot.setAttribute('cy', y.toFixed(1));
+    dot.setAttribute('r', '3');
+    svg.appendChild(dot);
+  }
+
+  function clearSparklineScrubber(svg) {
+    svg.querySelectorAll('.crosshair, .hover-point').forEach((n) => {
+      n.remove();
+    });
   }
 
   // reduceSeries collapses a points array ([[ts, value], ...]) into a
