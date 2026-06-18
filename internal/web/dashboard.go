@@ -2,6 +2,7 @@ package web
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/neverbot/owl/internal/dashboards"
@@ -16,17 +17,21 @@ type dashboardTemplateData struct {
 
 // panelTemplateData is one row in the panel grid for the template.
 type panelTemplateData struct {
-	ID       string
-	Title    string
-	Expr     string
-	Legend   string // Grafana-style template, e.g. "{{name}}"
-	Unit     string
-	Status   string
-	Reason   string
-	ColStart int
-	ColSpan  int
-	RowStart int
-	RowSpan  int
+	ID        string
+	Title     string
+	Expr      string
+	Legend    string // Grafana-style template, e.g. "{{name}}"
+	Unit      string
+	Status    string
+	Reason    string
+	IsStat    bool   // true for stat or gauge panels — template emits .panel__stat
+	Calc      string // reduction operator (e.g. "lastNotNull", "max"); empty when IsStat is false
+	Decimals  string // decimal places as decimal string, or "" when unset
+	GraphMode string // "area" turns on the sparkline; empty/none disables it
+	ColStart  int
+	ColSpan   int
+	RowStart  int
+	RowSpan   int
 }
 
 // dashboardView handles GET /d/{id}.
@@ -78,18 +83,26 @@ func buildDashboardData(d *dashboards.Dashboard) dashboardTemplateData {
 			expr = p.Targets[0].Expr
 			legend = p.Targets[0].LegendFormat
 		}
+		decimals := ""
+		if p.Decimals != nil {
+			decimals = strconv.Itoa(*p.Decimals)
+		}
 		panels = append(panels, panelTemplateData{
-			ID:       p.ID,
-			Title:    p.Title,
-			Expr:     expr,
-			Legend:   legend,
-			Unit:     p.Unit,
-			Status:   p.Support.Status,
-			Reason:   p.Support.Reason,
-			ColStart: p.GridPos.X + 1,
-			ColSpan:  p.GridPos.W,
-			RowStart: p.GridPos.Y + 1,
-			RowSpan:  p.GridPos.H,
+			ID:        p.ID,
+			Title:     p.Title,
+			Expr:      expr,
+			Legend:    legend,
+			Unit:      p.Unit,
+			Status:    p.Support.Status,
+			Reason:    p.Support.Reason,
+			IsStat:    p.Type == "stat" || p.Type == "gauge",
+			Calc:      p.Calc,
+			Decimals:  decimals,
+			GraphMode: p.GraphMode,
+			ColStart:  p.GridPos.X + 1,
+			ColSpan:   p.GridPos.W,
+			RowStart:  p.GridPos.Y + 1,
+			RowSpan:   p.GridPos.H,
 		})
 	}
 

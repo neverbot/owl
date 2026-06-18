@@ -78,7 +78,7 @@
     <section class="panel-grid">
       {{range .Panels}}
       <article
-        class="panel{{if eq .Status "unsupported"}} panel--unsupported{{end}}"
+        class="panel{{if eq .Status "unsupported"}} panel--unsupported{{end}}{{if .IsStat}} panel--stat{{end}}"
         data-panel-id="{{.ID}}"
         data-expr="{{.Expr}}"
         data-legend="{{.Legend}}"
@@ -86,6 +86,7 @@
         data-unit="{{.Unit}}"
         data-status="{{.Status}}"
         data-reason="{{.Reason}}"
+        {{if .IsStat}}data-calc="{{.Calc}}" data-decimals="{{.Decimals}}" data-graph-mode="{{.GraphMode}}"{{end}}
         style="grid-column:{{.ColStart}}/span {{.ColSpan}};grid-row:{{.RowStart}}/span {{.RowSpan}}">
         <header class="panel__header">
           <h2 class="panel__title">{{.Title}}</h2>
@@ -93,6 +94,12 @@
         </header>
         {{if eq .Status "unsupported"}}
         <p class="panel__notice"><strong>Unsupported query.</strong> {{.Reason}}</p>
+        {{else if .IsStat}}
+        <div class="panel__stat">
+          {{if eq .GraphMode "area"}}<svg class="panel__sparkline" aria-hidden="true"></svg>{{end}}
+          <span class="panel__stat-value panel__stat-value--placeholder">—</span>
+          {{if .Unit}}<span class="panel__stat-unit">{{.Unit}}</span>{{end}}
+        </div>
         {{else}}
         <svg class="panel__chart" aria-label="{{.Title}} chart"></svg>
         <footer class="panel__footer">

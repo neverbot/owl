@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/neverbot/owl/internal/dashboards"
 )
 
 func TestDashboardViewRendersHTML(t *testing.T) {
@@ -104,5 +106,67 @@ func TestDashboardViewRefreshAttribute(t *testing.T) {
 	// alpha has refresh "5s" → 5000 ms
 	if !bytes.Contains(body, []byte(`data-refresh="5000"`)) {
 		t.Errorf("body missing data-refresh=5000, got:\n%s", body)
+	}
+}
+
+func TestBuildDashboardData_StatPanelFlags(t *testing.T) {
+	dec := 2
+	d := &dashboards.Dashboard{
+		ID:    "x",
+		Title: "X",
+		Panels: []dashboards.Panel{
+			{
+				ID:        "1",
+				Type:      "stat",
+				Title:     "Scans",
+				Unit:      "none",
+				Calc:      "max",
+				Decimals:  &dec,
+				GraphMode: "area",
+				Targets:   []dashboards.Target{{Expr: "up"}},
+				Support:   dashboards.PanelSupport{Status: "supported"},
+			},
+		},
+	}
+	got := buildDashboardData(d)
+	if len(got.Panels) != 1 {
+		t.Fatalf("got %d panels, want 1", len(got.Panels))
+	}
+	p := got.Panels[0]
+	if !p.IsStat {
+		t.Error("IsStat = false, want true")
+	}
+	if p.Calc != "max" {
+		t.Errorf("Calc = %q, want max", p.Calc)
+	}
+	if p.Decimals != "2" {
+		t.Errorf("Decimals = %q, want \"2\"", p.Decimals)
+	}
+	if p.GraphMode != "area" {
+		t.Errorf("GraphMode = %q, want area", p.GraphMode)
+	}
+}
+
+func TestBuildDashboardData_GaugePanelIsStat(t *testing.T) {
+	d := &dashboards.Dashboard{
+		Panels: []dashboards.Panel{
+			{ID: "1", Type: "gauge", Calc: "lastNotNull", Support: dashboards.PanelSupport{Status: "supported"}},
+		},
+	}
+	got := buildDashboardData(d)
+	if !got.Panels[0].IsStat {
+		t.Error("gauge should set IsStat = true")
+	}
+}
+
+func TestBuildDashboardData_TimeseriesIsNotStat(t *testing.T) {
+	d := &dashboards.Dashboard{
+		Panels: []dashboards.Panel{
+			{ID: "1", Type: "timeseries", Support: dashboards.PanelSupport{Status: "supported"}},
+		},
+	}
+	got := buildDashboardData(d)
+	if got.Panels[0].IsStat {
+		t.Error("timeseries should set IsStat = false")
 	}
 }
