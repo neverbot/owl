@@ -11,9 +11,11 @@ func init() {
 // chart.js's refreshStat fills in. data-static points at the
 // fixture JSON beside the page so the panel renders without an
 // owl backend, and data-refresh="0" disables the polling timer.
+// A single-entry data-queries array carries the optional legend so
+// the runtime and docs paths share the same legend-resolution logic.
 //
 // Required args: fixture (registered name in fixtures.go).
-// Optional args: expr (decorative query label), unit, title,
+// Optional args: expr (decorative query label), unit, title, legend,
 //
 //	calc (reduction operator; default lastNotNull),
 //	decimals (digits after the point as a string),
@@ -53,11 +55,15 @@ func statPartial(args map[string]string) (string, error) {
 	if unit != "" {
 		unitSpan = fmt.Sprintf(`<span class="panel__stat-unit">%s</span>`, unit)
 	}
+	queries := mustMarshalQueries([]chartQuery{{
+		Expr:   args["expr"],
+		Legend: args["legend"],
+	}})
 	// The partial emits a single-line HTML blob on purpose: indented
 	// multi-line output gets misread as a markdown code block when
 	// the line preceding any child is blank.
 	return fmt.Sprintf(
-		`<article class="panel panel--stat" data-static=%q data-expr=%q data-unit=%q data-calc=%q data-decimals=%q data-graph-mode=%q data-refresh="0"><header class="panel__header"><h2 class="panel__title">%s</h2>%s</header><div class="panel__stat"><span class="panel__stat-value panel__stat-value--placeholder">—</span>%s%s</div></article>`,
-		withBase("/data/"+name+".json"), args["expr"], unit, calc, decimals, graphMode,
+		`<article class="panel panel--stat" data-static=%q data-queries='%s' data-unit=%q data-calc=%q data-decimals=%q data-graph-mode=%q data-refresh="0"><header class="panel__header"><h2 class="panel__title">%s</h2>%s</header><div class="panel__stat"><span class="panel__stat-value panel__stat-value--placeholder">—</span>%s%s</div></article>`,
+		withBase("/data/"+name+".json"), queries, unit, calc, decimals, graphMode,
 		title, unitMarkup, unitSpan, tail), nil
 }
