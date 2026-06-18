@@ -2,8 +2,11 @@ package scrape
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"log/slog"
 	"net/http"
+	"os"
 	"sort"
 	"sync"
 	"time"
@@ -25,19 +28,22 @@ type Manager struct {
 
 	healthMu sync.RWMutex
 	health   map[string]*TargetHealth // keyed by Target.Name
+
+	clients *httpClientCache
 }
 
 // TargetHealth captures the most recent scrape outcome for one target.
 // Returned by Manager.HealthSnapshot for the /api/targets endpoint.
 type TargetHealth struct {
-	Name        string            `json:"name"`
-	URL         string            `json:"url"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Interval    time.Duration     `json:"interval"`
-	LastScrape  time.Time         `json:"last_scrape,omitempty"`
-	LastError   string            `json:"last_error,omitempty"`
-	LastSamples int               `json:"last_samples"`
-	Duration    time.Duration     `json:"duration,omitempty"`
+	Name           string            `json:"name"`
+	URL            string            `json:"url"`
+	Labels         map[string]string `json:"labels,omitempty"`
+	Interval       time.Duration     `json:"interval"`
+	LastScrape     time.Time         `json:"last_scrape,omitempty"`
+	LastStatusCode int               `json:"last_status_code,omitempty"`
+	LastError      string            `json:"last_error,omitempty"`
+	LastSamples    int               `json:"last_samples"`
+	Duration       time.Duration     `json:"duration,omitempty"`
 }
 
 type targetRunner struct {
@@ -51,6 +57,7 @@ func NewManager(app storage.Appender) *Manager {
 		app:     app,
 		current: make(map[string]targetRunner),
 		health:  make(map[string]*TargetHealth),
+		clients: newHTTPClientCache(),
 	}
 }
 
@@ -86,7 +93,7 @@ func (m *Manager) HealthSnapshot() []TargetHealth {
 	return out
 }
 
-func (m *Manager) recordHealth(tgt Target, samples int, dur time.Duration, err error) {
+func (m *Manager) recordHealth(tgt Target, samples int, code int, dur time.Duration, err error) {
 	m.healthMu.Lock()
 	defer m.healthMu.Unlock()
 	h, ok := m.health[tgt.Name]
@@ -99,6 +106,7 @@ func (m *Manager) recordHealth(tgt Target, samples int, dur time.Duration, err e
 	h.Labels = tgt.Labels
 	h.LastScrape = time.Now()
 	h.LastSamples = samples
+	h.LastStatusCode = code
 	h.Duration = dur
 	if err != nil {
 		h.LastError = err.Error()
@@ -198,11 +206,12 @@ func (m *Manager) runTarget(ctx context.Context, tgt Target) {
 	if interval <= 0 {
 		interval = 15 * time.Second
 	}
+	client := m.clients.clientFor(tgt.TLS)
 
 	scrape := func() {
 		start := time.Now()
-		n, _, err := ScrapeOnce(ctx, http.DefaultClient, tgt, m.app)
-		m.recordHealth(tgt, n, time.Since(start), err)
+		n, code, err := ScrapeOnce(ctx, client, tgt, m.app)
+		m.recordHealth(tgt, n, code, time.Since(start), err)
 		if err != nil && ctx.Err() == nil {
 			slog.Error("scrape failed", "target", tgt.Name, "err", err)
 		}
@@ -220,6 +229,59 @@ func (m *Manager) runTarget(ctx context.Context, tgt Target) {
 			scrape()
 		}
 	}
+}
+
+// httpClientCache hands out *http.Client instances keyed by TLS shape.
+// Targets without a TLS block reuse http.DefaultClient so the
+// no-auth, no-TLS case allocates nothing. Distinct TLS configurations
+// get their own client+transport, built lazily on first request.
+type httpClientCache struct {
+	mu      sync.Mutex
+	clients map[string]*http.Client
+}
+
+func newHTTPClientCache() *httpClientCache {
+	return &httpClientCache{clients: make(map[string]*http.Client)}
+}
+
+// clientFor returns the cached client for tlsOpts, building one if needed.
+// A nil tlsOpts argument returns http.DefaultClient verbatim.
+func (c *httpClientCache) clientFor(tlsOpts *TLSOptions) *http.Client {
+	if tlsOpts == nil {
+		return http.DefaultClient
+	}
+	key := tlsCacheKey(tlsOpts)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if cl, ok := c.clients[key]; ok {
+		return cl
+	}
+	cl := buildHTTPClient(tlsOpts)
+	c.clients[key] = cl
+	return cl
+}
+
+func tlsCacheKey(t *TLSOptions) string {
+	skip := "0"
+	if t.InsecureSkipVerify {
+		skip = "1"
+	}
+	return skip + "\x00" + t.CAFile
+}
+
+func buildHTTPClient(t *TLSOptions) *http.Client {
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	cfg := &tls.Config{InsecureSkipVerify: t.InsecureSkipVerify} //nolint:gosec
+	if t.CAFile != "" {
+		if data, err := os.ReadFile(t.CAFile); err == nil {
+			pool := x509.NewCertPool()
+			if pool.AppendCertsFromPEM(data) {
+				cfg.RootCAs = pool
+			}
+		}
+	}
+	tr.TLSClientConfig = cfg
+	return &http.Client{Transport: tr}
 }
 
 // targetsEqual returns true if a and b represent the same scrape configuration,

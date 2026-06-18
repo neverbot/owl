@@ -148,3 +148,28 @@ func TestHealthSnapshotRecordsErrors(t *testing.T) {
 		t.Errorf("samples on error = %d, want 0", h[0].LastSamples)
 	}
 }
+
+func TestHTTPClientCache_ReusesAcrossEqualTLS(t *testing.T) {
+	c := newHTTPClientCache()
+	a := c.clientFor(&TLSOptions{InsecureSkipVerify: true})
+	b := c.clientFor(&TLSOptions{InsecureSkipVerify: true})
+	if a != b {
+		t.Fatalf("identical TLSOptions must yield the same *http.Client")
+	}
+}
+
+func TestHTTPClientCache_DistinctForDifferentTLS(t *testing.T) {
+	c := newHTTPClientCache()
+	a := c.clientFor(nil)
+	b := c.clientFor(&TLSOptions{InsecureSkipVerify: true})
+	if a == b {
+		t.Fatalf("nil and skip-verify must yield distinct clients")
+	}
+}
+
+func TestHTTPClientCache_NilUsesDefault(t *testing.T) {
+	c := newHTTPClientCache()
+	if c.clientFor(nil) != http.DefaultClient {
+		t.Fatal("nil TLSOptions must reuse http.DefaultClient (no allocation)")
+	}
+}
