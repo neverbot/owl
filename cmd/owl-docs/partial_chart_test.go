@@ -13,6 +13,7 @@ func TestChartPartialEmitsPanel(t *testing.T) {
 		"fixture": "rate-typical",
 		"expr":    "rate(http_requests_total[1m])",
 		"unit":    "ops",
+		"legend":  "{{job}}",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -21,10 +22,14 @@ func TestChartPartialEmitsPanel(t *testing.T) {
 		`data-static="/data/rate-typical.json"`,
 		`data-refresh="0"`,
 		`data-unit="ops"`,
+		`data-queries='[{"expr":"rate(http_requests_total[1m])","legend":"{{job}}"}]'`,
 	} {
 		if !strings.Contains(out, w) {
 			t.Errorf("missing %q in:\n%s", w, out)
 		}
+	}
+	if strings.Contains(out, "data-expr=") {
+		t.Errorf("data-expr should not appear; got:\n%s", out)
 	}
 }
 

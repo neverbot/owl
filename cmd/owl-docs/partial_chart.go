@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync"
 )
@@ -51,9 +52,11 @@ func referencedFixtureList() []string {
 // fills in. The data-static attribute tells chart.js to fetch the
 // fixture JSON beside the page instead of /api/query, and
 // data-refresh="0" disables the polling timer (fixtures are static).
+// A single-entry data-queries array carries the optional legend so
+// the runtime and docs paths share the same legend-resolution logic.
 //
 // Required args: fixture (registered name in fixtures.go).
-// Optional args: expr (decorative query label), unit, title.
+// Optional args: expr (decorative query label), unit, title, legend.
 func chartPartial(args map[string]string) (string, error) {
 	name := args["fixture"]
 	if name == "" {
@@ -72,8 +75,12 @@ func chartPartial(args map[string]string) (string, error) {
 	if unit != "" {
 		unitMarkup = fmt.Sprintf(`<span class="panel__unit">%s</span>`, unit)
 	}
+	queries := mustMarshalQueries([]chartQuery{{
+		Expr:   args["expr"],
+		Legend: args["legend"],
+	}})
 	return fmt.Sprintf(
-		`<article class="panel" data-static=%q data-expr=%q data-unit=%q data-refresh="0">
+		`<article class="panel" data-static=%q data-queries='%s' data-unit=%q data-refresh="0">
   <header class="panel__header">
     <h2 class="panel__title">%s</h2>
     %s
@@ -84,5 +91,20 @@ func chartPartial(args map[string]string) (string, error) {
     <div class="panel__legend"></div>
   </footer>
 </article>`,
-		withBase("/data/"+name+".json"), args["expr"], unit, title, unitMarkup, title), nil
+		withBase("/data/"+name+".json"), queries, unit, title, unitMarkup, title), nil
+}
+
+// chartQuery mirrors the {expr, legend} pair the dashboard template
+// emits inside data-queries. Lives in this file so partial_stat.go
+// can share the same shape via the registered helper.
+type chartQuery struct {
+	Expr   string `json:"expr"`
+	Legend string `json:"legend"`
+}
+
+// mustMarshalQueries serialises a query list to its data-queries
+// string form. Marshalling a flat []chartQuery cannot fail.
+func mustMarshalQueries(qs []chartQuery) string {
+	b, _ := json.Marshal(qs)
+	return string(b)
 }
