@@ -1082,10 +1082,53 @@
         const first = seriesList[0];
         const value = first ? reduceSeries(first.points, calc) : null;
         writeStatValue(panel, value, unit, decimals);
+        if (panel.dataset.graphMode === 'area') {
+          drawSparkline(panel, first ? first.points : []);
+        }
       })
       .catch(() => {
         /* network error — keep last render */
       });
+  }
+
+  // drawSparkline paints a thin, low-opacity line across the bottom
+  // half of the panel. The data domain is the same one the value was
+  // reduced from. Empty / single-point series clear the SVG so a
+  // previous render does not linger.
+  function drawSparkline(panel, points) {
+    const svg = panel.querySelector('.panel__sparkline');
+    if (!svg) return;
+    clearChildren(svg);
+    if (!points || points.length < 2) return;
+    const width = svg.clientWidth || 200;
+    const height = svg.clientHeight || 40;
+    const xs = [];
+    const ys = [];
+    for (let i = 0; i < points.length; i++) {
+      const v = points[i][1];
+      if (v === null || v === undefined || Number.isNaN(v)) continue;
+      xs.push(points[i][0]);
+      ys.push(v);
+    }
+    if (xs.length < 2) return;
+    const xmin = xs[0];
+    const xmax = xs[xs.length - 1];
+    const ymin = Math.min.apply(null, ys);
+    const ymax = Math.max.apply(null, ys);
+    if (xmax === xmin) return;
+    const yspan = ymax - ymin || 1;
+    let path = 'M';
+    for (let j = 0; j < xs.length; j++) {
+      const px = ((xs[j] - xmin) / (xmax - xmin)) * width;
+      const py = height - ((ys[j] - ymin) / yspan) * height;
+      path += (j === 0 ? '' : ' L') + px.toFixed(1) + ',' + py.toFixed(1);
+    }
+    svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
+    svg.setAttribute('preserveAspectRatio', 'none');
+    const el = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    el.setAttribute('class', 'series');
+    el.setAttribute('d', path);
+    svg.appendChild(el);
   }
 
   // reduceSeries collapses a points array ([[ts, value], ...]) into a
