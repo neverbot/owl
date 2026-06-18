@@ -2,9 +2,11 @@ package scrape
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -41,7 +43,7 @@ func TestScrapeOnceWritesSamples(t *testing.T) {
 	app := &fakeAppender{}
 	tgt := Target{Name: "demo", URL: ts.URL, Timeout: time.Second, Labels: map[string]string{"job": "demo"}}
 
-	if _, err := ScrapeOnce(context.Background(), tgt, app); err != nil {
+	if _, _, err := ScrapeOnce(context.Background(), ts.Client(), tgt, app); err != nil {
 		t.Fatalf("ScrapeOnce: %v", err)
 	}
 
@@ -69,7 +71,7 @@ func TestScrapeOnceErrorOnNon200(t *testing.T) {
 	defer ts.Close()
 
 	tgt := Target{Name: "bad", URL: ts.URL, Timeout: time.Second}
-	_, err := ScrapeOnce(context.Background(), tgt, &fakeAppender{})
+	_, _, err := ScrapeOnce(context.Background(), ts.Client(), tgt, &fakeAppender{})
 	if err == nil {
 		t.Error("expected error on 500 response")
 	}
@@ -83,7 +85,7 @@ func TestScrapeOnceErrorOnTimeout(t *testing.T) {
 	defer ts.Close()
 
 	tgt := Target{Name: "slow", URL: ts.URL, Timeout: 50 * time.Millisecond}
-	_, err := ScrapeOnce(context.Background(), tgt, &fakeAppender{})
+	_, _, err := ScrapeOnce(context.Background(), ts.Client(), tgt, &fakeAppender{})
 	if err == nil {
 		t.Error("expected timeout error")
 	}
@@ -100,7 +102,7 @@ func TestScrapeOnceKeepFilter(t *testing.T) {
 		Name: "fruit", URL: ts.URL, Timeout: time.Second,
 		Keep: []*regexp.Regexp{regexp.MustCompile(`^(apples|bananas)_total$`)},
 	}
-	n, err := ScrapeOnce(context.Background(), tgt, app)
+	n, _, err := ScrapeOnce(context.Background(), ts.Client(), tgt, app)
 	if err != nil {
 		t.Fatalf("ScrapeOnce: %v", err)
 	}
@@ -140,7 +142,7 @@ func TestScrapeOnceDropFilter(t *testing.T) {
 		Name: "fruit", URL: ts.URL, Timeout: time.Second,
 		Drop: []*regexp.Regexp{regexp.MustCompile(`^oranges_`)},
 	}
-	n, err := ScrapeOnce(context.Background(), tgt, app)
+	n, _, err := ScrapeOnce(context.Background(), ts.Client(), tgt, app)
 	if err != nil {
 		t.Fatalf("ScrapeOnce: %v", err)
 	}
@@ -162,7 +164,7 @@ func TestScrapeOnceKeepAndDropCombined(t *testing.T) {
 		Keep: []*regexp.Regexp{regexp.MustCompile(`_total$`)},
 		Drop: []*regexp.Regexp{regexp.MustCompile(`^bananas_`)},
 	}
-	n, err := ScrapeOnce(context.Background(), tgt, app)
+	n, _, err := ScrapeOnce(context.Background(), ts.Client(), tgt, app)
 	if err != nil {
 		t.Fatalf("ScrapeOnce: %v", err)
 	}
@@ -191,5 +193,117 @@ func TestKeepMetricSemantics(t *testing.T) {
 		if got := keepMetric(tc.in, tc.k, tc.d); got != tc.want {
 			t.Errorf("%s: keepMetric(%q) = %v, want %v", tc.name, tc.in, got, tc.want)
 		}
+	}
+}
+
+func TestScrapeOnce_BearerToken(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer abc123" {
+			t.Errorf("Authorization = %q, want %q", got, "Bearer abc123")
+		}
+		fmt.Fprintln(w, "metric_a 1")
+	}))
+	defer srv.Close()
+
+	app := &fakeAppender{}
+	tgt := Target{Name: "t", URL: srv.URL, BearerToken: "abc123"}
+	n, code, err := ScrapeOnce(context.Background(), srv.Client(), tgt, app)
+	if err != nil {
+		t.Fatalf("ScrapeOnce: %v", err)
+	}
+	if n != 1 || code != 200 {
+		t.Fatalf("n=%d code=%d, want 1, 200", n, code)
+	}
+}
+
+func TestScrapeOnce_BasicAuth(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u, p, ok := r.BasicAuth()
+		if !ok || u != "alice" || p != "wonder" {
+			t.Errorf("BasicAuth = (%q,%q,%v), want (alice,wonder,true)", u, p, ok)
+		}
+		fmt.Fprintln(w, "metric_b 2")
+	}))
+	defer srv.Close()
+
+	app := &fakeAppender{}
+	tgt := Target{Name: "t", URL: srv.URL, BasicAuth: &BasicAuth{Username: "alice", Password: "wonder"}}
+	n, _, err := ScrapeOnce(context.Background(), srv.Client(), tgt, app)
+	if err != nil {
+		t.Fatalf("ScrapeOnce: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("n=%d, want 1", n)
+	}
+}
+
+func TestScrapeOnce_HeadersOnly(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("X-API-Key"); got != "k1" {
+			t.Errorf("X-API-Key = %q, want k1", got)
+		}
+		fmt.Fprintln(w, "metric_c 3")
+	}))
+	defer srv.Close()
+
+	app := &fakeAppender{}
+	tgt := Target{Name: "t", URL: srv.URL, Headers: map[string]string{"X-API-Key": "k1"}}
+	if _, _, err := ScrapeOnce(context.Background(), srv.Client(), tgt, app); err != nil {
+		t.Fatalf("ScrapeOnce: %v", err)
+	}
+}
+
+func TestScrapeOnce_BasicPlusHeaders(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u, _, ok := r.BasicAuth()
+		if !ok || u != "alice" {
+			t.Errorf("BasicAuth missing or wrong user")
+		}
+		if got := r.Header.Get("X-Tenant"); got != "owl" {
+			t.Errorf("X-Tenant = %q, want owl", got)
+		}
+		fmt.Fprintln(w, "metric_d 4")
+	}))
+	defer srv.Close()
+
+	app := &fakeAppender{}
+	tgt := Target{
+		Name:      "t",
+		URL:       srv.URL,
+		BasicAuth: &BasicAuth{Username: "alice", Password: "x"},
+		Headers:   map[string]string{"X-Tenant": "owl"},
+	}
+	if _, _, err := ScrapeOnce(context.Background(), srv.Client(), tgt, app); err != nil {
+		t.Fatalf("ScrapeOnce: %v", err)
+	}
+}
+
+func TestScrapeOnce_401Specialised(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "nope", http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	_, code, err := ScrapeOnce(context.Background(), srv.Client(), Target{Name: "t", URL: srv.URL}, &fakeAppender{})
+	if code != 401 {
+		t.Fatalf("code = %d, want 401", code)
+	}
+	if err == nil || !strings.Contains(err.Error(), "Unauthorized") || !strings.Contains(err.Error(), "auth: block") {
+		t.Fatalf("want specialised 401 message, got %v", err)
+	}
+}
+
+func TestScrapeOnce_403Specialised(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "no", http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	_, code, err := ScrapeOnce(context.Background(), srv.Client(), Target{Name: "t", URL: srv.URL}, &fakeAppender{})
+	if code != 403 {
+		t.Fatalf("code = %d, want 403", code)
+	}
+	if err == nil || !strings.Contains(err.Error(), "Forbidden") {
+		t.Fatalf("want specialised 403 message, got %v", err)
 	}
 }

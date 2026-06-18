@@ -22,22 +22,42 @@ import (
 // then removes any survivor matching at least one Drop pattern. Nil
 // or empty filters preserve everything the endpoint exposes.
 type Target struct {
-	Name     string            // unique stable id
-	URL      string            // full http URL of the /metrics endpoint
-	Interval time.Duration     // ignored by ScrapeOnce, used by Manager
-	Timeout  time.Duration     // per-request timeout
-	Labels   map[string]string // attached to every sample
-	Keep     []*regexp.Regexp
-	Drop     []*regexp.Regexp
+	Name        string            // unique stable id
+	URL         string            // full http URL of the /metrics endpoint
+	Interval    time.Duration     // ignored by ScrapeOnce, used by Manager
+	Timeout     time.Duration     // per-request timeout
+	Labels      map[string]string // attached to every sample
+	Keep        []*regexp.Regexp
+	Drop        []*regexp.Regexp
+	BearerToken string            // optional Authorization: Bearer <token>
+	BasicAuth   *BasicAuth        // optional HTTP Basic credentials
+	Headers     map[string]string // optional arbitrary headers
+	TLS         *TLSOptions       // optional TLS overrides; consumed by Manager
 }
 
-// ScrapeOnce performs one GET against tgt.URL with tgt.Timeout, parses
-// the response as Prometheus exposition format, and writes the resulting
-// samples to app. Returns the number of samples appended and any error
-// encountered. Each sample is enriched with the target's labels plus
-// instance=<host:port>, and timestamped at scrape time if the exposition
-// did not provide one.
-func ScrapeOnce(ctx context.Context, tgt Target, app storage.Appender) (int, error) {
+// BasicAuth carries the username/password pair for HTTP Basic auth.
+type BasicAuth struct {
+	Username string
+	Password string
+}
+
+// TLSOptions mirrors the per-target TLS settings the Manager uses to
+// pick (or build) an *http.Client. ScrapeOnce never reads this — the
+// Manager dispatches based on it and passes the matching client.
+type TLSOptions struct {
+	InsecureSkipVerify bool
+	CAFile             string
+}
+
+// ScrapeOnce performs one GET against tgt.URL using client (must not
+// be nil) with tgt.Timeout, parses the response as Prometheus
+// exposition format, and writes the resulting samples to app.
+// Returns (samples appended, HTTP status code or 0 if none, error).
+// Each sample is enriched with tgt.Labels plus instance=<host:port>
+// and timestamped at scrape time if the exposition did not provide
+// one. 401 and 403 responses produce specialised error messages that
+// tell the operator exactly where to look in the config.
+func ScrapeOnce(ctx context.Context, client *http.Client, tgt Target, app storage.Appender) (int, int, error) {
 	timeout := tgt.Timeout
 	if timeout <= 0 {
 		timeout = 10 * time.Second
@@ -47,23 +67,33 @@ func ScrapeOnce(ctx context.Context, tgt Target, app storage.Appender) (int, err
 
 	req, err := http.NewRequestWithContext(rctx, http.MethodGet, tgt.URL, nil)
 	if err != nil {
-		return 0, fmt.Errorf("build request: %w", err)
+		return 0, 0, fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Accept", "text/plain;version=0.0.4")
 	req.Header.Set("User-Agent", "owl-scraper/0.0")
 
-	resp, err := http.DefaultClient.Do(req)
+	switch {
+	case tgt.BearerToken != "":
+		req.Header.Set("Authorization", "Bearer "+tgt.BearerToken)
+	case tgt.BasicAuth != nil:
+		req.SetBasicAuth(tgt.BasicAuth.Username, tgt.BasicAuth.Password)
+	}
+	for k, v := range tgt.Headers {
+		req.Header.Set(k, v)
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
-		return 0, fmt.Errorf("do: %w", err)
+		return 0, 0, fmt.Errorf("do: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("status %d from %s", resp.StatusCode, tgt.URL)
+		return 0, resp.StatusCode, statusError(resp.StatusCode, tgt.URL)
 	}
 
 	parsed, err := expfmt.Parse(resp.Body)
 	if err != nil {
-		return 0, fmt.Errorf("parse %s: %w", tgt.URL, err)
+		return 0, resp.StatusCode, fmt.Errorf("parse %s: %w", tgt.URL, err)
 	}
 
 	now := time.Now().UnixMilli()
@@ -87,12 +117,26 @@ func ScrapeOnce(ctx context.Context, tgt Target, app storage.Appender) (int, err
 		})
 	}
 	if len(batch) == 0 {
-		return 0, nil
+		return 0, resp.StatusCode, nil
 	}
 	if err := app.Append(batch); err != nil {
-		return 0, err
+		return 0, resp.StatusCode, err
 	}
-	return len(batch), nil
+	return len(batch), resp.StatusCode, nil
+}
+
+// statusError returns the operator-facing error for a non-2xx
+// status, with 401 and 403 specialised so the /targets page tells
+// the operator where to look in the config.
+func statusError(code int, url string) error {
+	switch code {
+	case http.StatusUnauthorized:
+		return fmt.Errorf("%d Unauthorized — check auth: block in config for %s", code, url)
+	case http.StatusForbidden:
+		return fmt.Errorf("%d Forbidden — credentials accepted but access denied for %s", code, url)
+	default:
+		return fmt.Errorf("status %d from %s", code, url)
+	}
 }
 
 // mergeLabels merges per-target labels with per-sample labels and adds

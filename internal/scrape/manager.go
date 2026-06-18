@@ -3,6 +3,7 @@ package scrape
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"sort"
 	"sync"
 	"time"
@@ -200,7 +201,7 @@ func (m *Manager) runTarget(ctx context.Context, tgt Target) {
 
 	scrape := func() {
 		start := time.Now()
-		n, err := ScrapeOnce(ctx, tgt, m.app)
+		n, _, err := ScrapeOnce(ctx, http.DefaultClient, tgt, m.app)
 		m.recordHealth(tgt, n, time.Since(start), err)
 		if err != nil && ctx.Err() == nil {
 			slog.Error("scrape failed", "target", tgt.Name, "err", err)
