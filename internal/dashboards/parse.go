@@ -28,6 +28,7 @@ type grafanaPanel struct {
 	Title       string          `json:"title"`
 	GridPos     grafanaGridPos  `json:"gridPos"`
 	FieldConfig grafanaFieldCfg `json:"fieldConfig"`
+	Options     grafanaOptions  `json:"options"`
 	Targets     []grafanaTarget `json:"targets"`
 }
 
@@ -43,7 +44,17 @@ type grafanaFieldCfg struct {
 }
 
 type grafanaDefaults struct {
-	Unit string `json:"unit"`
+	Unit     string `json:"unit"`
+	Decimals *int   `json:"decimals"`
+}
+
+type grafanaOptions struct {
+	ReduceOptions grafanaReduceOptions `json:"reduceOptions"`
+	GraphMode     string               `json:"graphMode"`
+}
+
+type grafanaReduceOptions struct {
+	Calcs []string `json:"calcs"`
 }
 
 type grafanaTarget struct {
@@ -84,7 +95,10 @@ func ParseDashboard(id string, data []byte) (*Dashboard, error) {
 				W: gp.GridPos.W,
 				H: gp.GridPos.H,
 			},
-			Unit: normaliseUnit(gp.FieldConfig.Defaults.Unit),
+			Unit:      normaliseUnit(gp.FieldConfig.Defaults.Unit),
+			Decimals:  gp.FieldConfig.Defaults.Decimals,
+			Calc:      resolveCalc(gp.Options.ReduceOptions.Calcs),
+			GraphMode: gp.Options.GraphMode,
 		}
 		for _, gt := range gp.Targets {
 			p.Targets = append(p.Targets, Target{
@@ -150,4 +164,31 @@ func normaliseUnit(u string) string {
 	default:
 		return u
 	}
+}
+
+// supportedCalcs lists the reduction operators recognised by owl's
+// stat renderer. Unknown values fall back to lastNotNull — see
+// resolveCalc.
+var supportedCalcs = map[string]bool{
+	"lastNotNull": true,
+	"last":        true,
+	"first":       true,
+	"max":         true,
+	"min":         true,
+	"mean":        true,
+	"sum":         true,
+}
+
+// resolveCalc picks the first entry in calcs that owl supports, or
+// returns "lastNotNull" when the list is empty or every entry is
+// unknown. Grafana stat panels accept multiple calcs for an "all
+// values" mode that owl does not implement — only the first entry is
+// honoured.
+func resolveCalc(calcs []string) string {
+	for _, c := range calcs {
+		if supportedCalcs[c] {
+			return c
+		}
+	}
+	return "lastNotNull"
 }

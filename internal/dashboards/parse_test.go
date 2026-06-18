@@ -178,3 +178,123 @@ func TestNormaliseUnit(t *testing.T) {
 		}
 	}
 }
+
+func TestParse_StatCalcDefault(t *testing.T) {
+	data := []byte(`{
+		"panels": [
+			{"id": 1, "type": "stat", "title": "p", "targets": [{"expr": "up"}]}
+		]
+	}`)
+	d, err := ParseDashboard("x", data)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(d.Panels) != 1 {
+		t.Fatalf("got %d panels, want 1", len(d.Panels))
+	}
+	if got := d.Panels[0].Calc; got != "lastNotNull" {
+		t.Errorf("Calc = %q, want lastNotNull (default)", got)
+	}
+}
+
+func TestParse_StatCalcExplicit(t *testing.T) {
+	data := []byte(`{
+		"panels": [
+			{
+				"id": 1, "type": "stat", "title": "p",
+				"options": {"reduceOptions": {"calcs": ["max"]}}
+			}
+		]
+	}`)
+	d, err := ParseDashboard("x", data)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got := d.Panels[0].Calc; got != "max" {
+		t.Errorf("Calc = %q, want max", got)
+	}
+}
+
+func TestParse_StatCalcUnknownFallsBack(t *testing.T) {
+	data := []byte(`{
+		"panels": [
+			{
+				"id": 1, "type": "stat", "title": "p",
+				"options": {"reduceOptions": {"calcs": ["bogus"]}}
+			}
+		]
+	}`)
+	d, err := ParseDashboard("x", data)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got := d.Panels[0].Calc; got != "lastNotNull" {
+		t.Errorf("Calc = %q, want lastNotNull (fallback)", got)
+	}
+}
+
+func TestParse_FieldConfigDecimals(t *testing.T) {
+	data := []byte(`{
+		"panels": [
+			{
+				"id": 1, "type": "stat", "title": "p",
+				"fieldConfig": {"defaults": {"decimals": 2}}
+			}
+		]
+	}`)
+	d, err := ParseDashboard("x", data)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if d.Panels[0].Decimals == nil || *d.Panels[0].Decimals != 2 {
+		t.Errorf("Decimals = %v, want *int(2)", d.Panels[0].Decimals)
+	}
+}
+
+func TestParse_FieldConfigDecimalsUnset(t *testing.T) {
+	data := []byte(`{
+		"panels": [
+			{"id": 1, "type": "stat", "title": "p"}
+		]
+	}`)
+	d, err := ParseDashboard("x", data)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if d.Panels[0].Decimals != nil {
+		t.Errorf("Decimals = %v, want nil", d.Panels[0].Decimals)
+	}
+}
+
+func TestParse_StatGraphModeArea(t *testing.T) {
+	data := []byte(`{
+		"panels": [
+			{
+				"id": 1, "type": "stat", "title": "p",
+				"options": {"graphMode": "area"}
+			}
+		]
+	}`)
+	d, err := ParseDashboard("x", data)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got := d.Panels[0].GraphMode; got != "area" {
+		t.Errorf("GraphMode = %q, want area", got)
+	}
+}
+
+func TestParse_StatGraphModeNone(t *testing.T) {
+	data := []byte(`{
+		"panels": [
+			{"id": 1, "type": "stat", "title": "p", "options": {"graphMode": "none"}}
+		]
+	}`)
+	d, err := ParseDashboard("x", data)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if d.Panels[0].GraphMode != "none" {
+		t.Errorf("GraphMode = %q, want none", d.Panels[0].GraphMode)
+	}
+}

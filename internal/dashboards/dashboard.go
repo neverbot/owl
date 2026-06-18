@@ -27,13 +27,16 @@ type Dashboard struct {
 
 // Panel is one panel extracted from a Grafana dashboard.
 type Panel struct {
-	ID      string // Grafana panel id coerced to string
-	Title   string
-	Type    string // raw type from JSON ("timeseries", "stat", "gauge", or other)
-	GridPos GridPos
-	Targets []Target
-	Unit    string       // fieldConfig.defaults.unit
-	Support PanelSupport // result of consulting Capabilities
+	ID        string // Grafana panel id coerced to string
+	Title     string
+	Type      string // raw type from JSON ("timeseries", "stat", "gauge", or other)
+	GridPos   GridPos
+	Targets   []Target
+	Unit      string       // fieldConfig.defaults.unit
+	Decimals  *int         // fieldConfig.defaults.decimals; nil when unset
+	Calc      string       // options.reduceOptions.calcs[0]; "lastNotNull" when unset
+	GraphMode string       // options.graphMode; "" when unset (no sparkline)
+	Support   PanelSupport // result of consulting Capabilities
 }
 
 // GridPos holds the Grafana grid position of a panel.
