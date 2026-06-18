@@ -95,9 +95,9 @@
         <p class="panel__notice"><strong>Unsupported query.</strong> {{.Reason}}</p>
         {{else if .IsStat}}
         <div class="panel__stat">
-          {{if eq .GraphMode "area"}}<svg class="panel__sparkline" aria-hidden="true"></svg>{{end}}
           <span class="panel__stat-value panel__stat-value--placeholder">—</span>
           {{if .Unit}}<span class="panel__stat-unit">{{.Unit}}</span>{{end}}
+          {{if eq .GraphMode "area"}}<span class="panel__stat-time"></span><svg class="panel__sparkline" aria-hidden="true"></svg>{{end}}
         </div>
         {{else}}
         <svg class="panel__chart" aria-label="{{.Title}} chart"></svg>
