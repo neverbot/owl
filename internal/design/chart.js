@@ -938,6 +938,10 @@
 
   function refreshPanel(panel) {
     if (panel.dataset.status === 'unsupported') return;
+    if (panel.classList.contains('panel--stat')) {
+      refreshStat(panel);
+      return;
+    }
     var staticSrc = panel.dataset.static;
     var expr = panel.dataset.expr;
     if (!staticSrc && !expr) return;
@@ -1023,8 +1027,11 @@
   function schedulePanels() {
     document.querySelectorAll('.panel').forEach((panel) => {
       if (panel.dataset.status === 'unsupported') return;
-      var svg = panel.querySelector('.panel__chart');
-      if (svg) bindChartInteractions(svg);
+      const isStat = panel.classList.contains('panel--stat');
+      if (!isStat) {
+        const svg = panel.querySelector('.panel__chart');
+        if (svg) bindChartInteractions(svg);
+      }
 
       // data-refresh="0" means "load once, never re-poll" — used by
       // the docs site so fixture-backed panels render exactly once.
@@ -1040,6 +1047,153 @@
       var interval = Math.max(parsed || DEFAULT_REFRESH_MS, MIN_REFRESH_MS);
       setInterval(tick, interval);
     });
+  }
+
+  // refreshStat fetches the same /api/query payload refreshPanel uses,
+  // reduces the first series to a single number via the panel's
+  // data-calc, formats it with the panel's data-unit / data-decimals,
+  // and writes it to the .panel__stat-value node. Multi-series queries
+  // pick the first series only — stat panels are a one-number idiom.
+  function refreshStat(panel) {
+    const expr = panel.dataset.expr;
+    if (!expr) return;
+    const unit = panel.dataset.unit || '';
+    const calc = panel.dataset.calc || 'lastNotNull';
+    const decimalsAttr = panel.dataset.decimals;
+    const decimals =
+      decimalsAttr === '' || decimalsAttr === undefined ? null : parseInt(decimalsAttr, 10);
+    const to = effectiveTo();
+    const from = to - currentWindowMs();
+    const step = effectiveStepMs();
+    const url =
+      '/api/query?expr=' +
+      encodeURIComponent(expr) +
+      '&from=' +
+      from +
+      '&to=' +
+      to +
+      '&step=' +
+      step;
+    fetch(url)
+      .then((resp) => (resp.ok ? resp.json() : null))
+      .then((body) => {
+        if (!body) return;
+        const seriesList = (body.series || []).filter((s) => s?.points && s.points.length > 0);
+        const first = seriesList[0];
+        const value = first ? reduceSeries(first.points, calc) : null;
+        writeStatValue(panel, value, unit, decimals);
+      })
+      .catch(() => {
+        /* network error — keep last render */
+      });
+  }
+
+  // reduceSeries collapses a points array ([[ts, value], ...]) into a
+  // single number using one of the supported calc operators. Null /
+  // NaN samples are skipped except for "last", which honours the most
+  // recent sample whatever it is. Returns null when no usable sample
+  // exists.
+  function reduceSeries(points, calc) {
+    if (!points || points.length === 0) return null;
+    switch (calc) {
+      case 'last': {
+        const p = points[points.length - 1];
+        return p ? p[1] : null;
+      }
+      case 'first': {
+        for (let i = 0; i < points.length; i++) {
+          const v = points[i][1];
+          if (v !== null && v !== undefined && !Number.isNaN(v)) return v;
+        }
+        return null;
+      }
+      case 'max': {
+        let m = null;
+        for (const [, v] of points) {
+          if (v === null || v === undefined || Number.isNaN(v)) continue;
+          if (m === null || v > m) m = v;
+        }
+        return m;
+      }
+      case 'min': {
+        let m = null;
+        for (const [, v] of points) {
+          if (v === null || v === undefined || Number.isNaN(v)) continue;
+          if (m === null || v < m) m = v;
+        }
+        return m;
+      }
+      case 'mean': {
+        let sum = 0;
+        let count = 0;
+        for (const [, v] of points) {
+          if (v === null || v === undefined || Number.isNaN(v)) continue;
+          sum += v;
+          count += 1;
+        }
+        return count === 0 ? null : sum / count;
+      }
+      case 'sum': {
+        let sum = 0;
+        let count = 0;
+        for (const [, v] of points) {
+          if (v === null || v === undefined || Number.isNaN(v)) continue;
+          sum += v;
+          count += 1;
+        }
+        return count === 0 ? null : sum;
+      }
+      default: {
+        for (let i = points.length - 1; i >= 0; i--) {
+          const v = points[i][1];
+          if (v !== null && v !== undefined && !Number.isNaN(v)) return v;
+        }
+        return null;
+      }
+    }
+  }
+
+  // writeStatValue formats value with the panel's unit / decimals and
+  // writes it to the .panel__stat-value node. Null values render as
+  // an em-dash in the muted placeholder colour.
+  function writeStatValue(panel, value, unit, decimals) {
+    const el = panel.querySelector('.panel__stat-value');
+    if (!el) return;
+    if (value === null || value === undefined || Number.isNaN(value)) {
+      el.textContent = '—';
+      el.classList.add('panel__stat-value--placeholder');
+      return;
+    }
+    el.classList.remove('panel__stat-value--placeholder');
+    el.textContent = formatStatValue(value, unit, decimals);
+  }
+
+  // formatStatValue produces the big-number string. When decimals is
+  // an explicit number, it pins the precision; otherwise it falls back
+  // to a magnitude-aware heuristic (>=100 → 0 dp, otherwise 1 dp).
+  // Unit handling reuses fmt's known unit table for bytes/seconds/
+  // percent; bare numbers get a thin-space thousands separator.
+  function formatStatValue(value, unit, decimals) {
+    if (
+      unit === 'bytes' ||
+      unit === 'Bps' ||
+      unit === 'bytes/s' ||
+      unit === 's' ||
+      unit === 'ms' ||
+      unit === 'percent' ||
+      unit === 'cores' ||
+      unit === 'load'
+    ) {
+      return fmt(value, unit);
+    }
+    let dp = decimals;
+    if (dp === null || dp === undefined || Number.isNaN(dp)) {
+      dp = Math.abs(value) >= 100 ? 0 : 1;
+    }
+    const rounded = Number(value).toFixed(dp);
+    const parts = rounded.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return parts.join('.');
   }
 
   // ────────────────────────────────────────────────────────────────────────
