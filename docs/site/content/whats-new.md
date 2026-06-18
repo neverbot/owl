@@ -30,9 +30,7 @@ feature shows up here.
   (default), `last`, `first`, `max`, `min`, `mean`, `sum`. Formatting
   respects `fieldConfig.defaults.unit` and
   `fieldConfig.defaults.decimals`. Multi-series queries render the
-  first series' reduced value; documented as an anti-pattern. `auth`
-  and `last_status_code` already shipped for scrape targets on the
-  same day.
+  first series' reduced value; documented as an anti-pattern.
 - **Stat panels with opt-in sparkline.** Set
   `options.graphMode: "area"` and the stat panel layers a low-opacity
   chart behind the headline, with its own Y/X axes (value min/max,
@@ -42,6 +40,15 @@ feature shows up here.
   not shift on hover), a dashed crosshair and a per-series hover-point
   match the convention used by the multi-line chart panels. See
   [Stat panels](/dashboards/#stat-panels).
+- **Multi-target panels render every series.** Panels that declare
+  more than one `targets[]` no longer silently drop everything past
+  the first. The web layer emits a single `data-queries` JSON array
+  to the browser, and `chart.js` fans out one `/api/query` fetch per
+  target via `Promise.all`, merges the returned series preserving
+  YAML order, and renders them with their own `legendFormat`
+  templates. Bug fix; no config change needed — existing dashboards
+  that already declared multiple targets start showing the missing
+  lines on first reload.
 
 ## 2026-06-09
 
