@@ -630,6 +630,51 @@ h3.page-title {
 .panel__chart .marker--11 { fill: var(--series-11); }
 .panel__chart .marker--12 { fill: var(--series-12); }
 
+/* Stat panels render a single big number in place of the chart/footer
+   pair. The optional sparkline sits behind the value at low contrast
+   so the figure remains the figure. */
+.panel__stat {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: var(--s-1);
+  min-height: 160px;
+  padding: var(--s-3) var(--s-4);
+}
+.panel__stat-value {
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(2.2rem, 5vw, 3.4rem);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--fg);
+}
+.panel__stat-value--placeholder {
+  color: var(--muted);
+}
+.panel__stat-unit {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--subtle);
+  margin-top: var(--s-1);
+}
+.panel__sparkline {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 50%;
+  width: 100%;
+  opacity: 0.35;
+  pointer-events: none;
+}
+.panel__sparkline .series {
+  fill: none;
+  stroke: var(--series-1);
+  stroke-width: 0.75;
+  vector-effect: non-scaling-stroke;
+}
+
 /* Axis labels (rendered inside the SVG) */
 .panel__chart .axis-label {
   fill: var(--muted);
