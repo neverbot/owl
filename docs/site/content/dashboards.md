@@ -63,7 +63,7 @@ the chart; the rest of the dashboard still works.
 
 ## Panel types
 
-{{> chart fixture=gauge-memory expr="process_resident_memory_bytes" unit=bytes title="Resident memory (gauge)"}}
+{{> chart fixture=gauge-memory expr="process_resident_memory_bytes" unit=bytes title="Resident memory"}}
 
 - **`timeseries`** — the default. SVG line chart with axes, a
   crosshair on hover, and a tooltip listing series sorted by value.
@@ -83,7 +83,18 @@ one panel legible.
 
 Panels with `type: "stat"` (and `type: "gauge"`, which renders the
 same way) collapse the query result to a single big number instead of
-plotting a line. The reduction is driven by `options.reduceOptions.calcs`:
+plotting a line. The left example below is plain; the right one opts
+into the background sparkline — hover it to scrub through the series.
+
+<div class="stat-demo-row">
+
+{{> stat fixture=stat-alerts-firing expr="owl_alerts_firing" title="Alerts firing" calc=lastNotNull decimals=0}}
+
+{{> stat fixture=stat-load1-sparkline expr="node_load1" title="Load average (1m)" calc=lastNotNull decimals=2 sparkline=true}}
+
+</div>
+
+The reduction is driven by `options.reduceOptions.calcs`:
 
 | `calcs[0]`     | What owl shows                                                |
 |----------------|---------------------------------------------------------------|
@@ -114,6 +125,9 @@ matchers) when you see this.
 Set `options.graphMode: "area"` to draw a thin, low-contrast line
 across the bottom half of the panel from the same data the number is
 reduced from. Default is no sparkline (`graphMode: "none"` or absent).
+Hovering the panel swaps the headline value for the sample under the
+cursor along with the time delta, so the sparkline doubles as a
+mini-scrubber.
 
 ```json
 {

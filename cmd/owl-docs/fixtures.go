@@ -41,12 +41,14 @@ func (p FixturePoint) MarshalJSON() ([]byte, error) {
 // Names are referenced from .md content; an unknown name fails
 // `make docs-check` (Task 16).
 var fixtures = map[string]func() Fixture{
-	"rate-typical":      rateTypical,
-	"gauge-memory":      gaugeMemory,
-	"histogram-latency": histogramLatency,
-	"hero-multi-series": heroMultiSeries,
-	"host-cpu":          hostCPU,
-	"container-memory":  containerMemory,
+	"rate-typical":         rateTypical,
+	"gauge-memory":         gaugeMemory,
+	"histogram-latency":    histogramLatency,
+	"hero-multi-series":    heroMultiSeries,
+	"host-cpu":             hostCPU,
+	"container-memory":     containerMemory,
+	"stat-alerts-firing":   statAlertsFiring,
+	"stat-load1-sparkline": statLoad1Sparkline,
 }
 
 // FixtureNames returns every registered fixture name, sorted.
@@ -358,4 +360,57 @@ func containerMemory() Fixture {
 		})
 	}
 	return Fixture{Series: out}
+}
+
+// statAlertsFiring synthesises a small-cardinality counter that mostly
+// sits at 3 with occasional dips down to 2 and one spike to 5. Stat
+// panels reduce this to a single number via lastNotNull (default) —
+// the sparkline-less example.
+func statAlertsFiring() Fixture {
+	const n = 60
+	g := newGen(707)
+	vals := make([]float64, n)
+	cur := 3.0
+	for i := 0; i < n; i++ {
+		r := g.r.Float64()
+		switch {
+		case r < 0.07:
+			cur = 2
+		case r < 0.10:
+			cur = 5
+		case r < 0.30:
+			cur = 3
+		}
+		vals[i] = cur
+	}
+	// Pin the last sample to 3 so lastNotNull renders a stable value
+	// in the docs preview regardless of build-time randomness.
+	vals[n-1] = 3
+	return Fixture{Series: []FixtureSeries{{
+		Metric: "owl_alerts_firing",
+		Labels: map[string]string{},
+		Points: pointsFor(vals, 30),
+	}}}
+}
+
+// statLoad1Sparkline synthesises a load average series that wanders
+// between ~0.6 and ~1.9 over half an hour. Used for the
+// graphMode=area stat example so the sparkline has visible motion
+// without dwarfing the headline number.
+func statLoad1Sparkline() Fixture {
+	const n = 90
+	g := newGen(808)
+	vals := g.randomWalk(n,
+		/*base*/ 1.1,
+		/*drift*/ 0.003,
+		/*noiseAmp*/ 0.09,
+		/*spikeProb*/ 0.05,
+		/*spikeAmp*/ 0.45,
+		/*clampMin*/ 0.3,
+		/*clampMax*/ 2.2)
+	return Fixture{Series: []FixtureSeries{{
+		Metric: "node_load1",
+		Labels: map[string]string{"instance": "neverbot-server-1"},
+		Points: pointsFor(vals, 20),
+	}}}
 }
