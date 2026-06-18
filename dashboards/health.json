@@ -37,7 +37,7 @@
       "description": "Total seconds spent in GC stop-the-world pauses over the last 5 minutes. Persistent spikes here translate directly into request-latency jitter.",
       "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
       "fieldConfig": { "defaults": { "unit": "s", "min": 0 } },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "area" },
       "targets": [
         { "refId": "A", "expr": "increase(owl_gc_pause_seconds_total[5m])", "legendFormat": "gc pause" }
       ]
@@ -49,7 +49,7 @@
       "description": "Rows in the SQLite samples table. Climbs until a retention policy starts pruning.",
       "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
       "fieldConfig": { "defaults": { "unit": "short", "min": 0 } },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "area" },
       "targets": [
         { "refId": "A", "expr": "owl_storage_samples_total", "legendFormat": "samples" }
       ]
