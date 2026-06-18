@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -225,5 +226,93 @@ scrape:
 `)
 	if _, err := LoadBytes(data); err == nil {
 		t.Fatal("expected error for missing variable")
+	}
+}
+
+func loadValidating(t *testing.T, extra string) error {
+	t.Helper()
+	base := `
+listen: 127.0.0.1:9090
+storage:
+  path: /tmp/owl.db
+  retention:
+    time: 1h
+    size: 100MB
+    interval: 1m
+scrape:
+  default_interval: 30s
+  default_timeout: 10s
+`
+	_, err := LoadBytes([]byte(base + extra))
+	return err
+}
+
+func TestValidate_AuthBearerAndBasicMutuallyExclusive(t *testing.T) {
+	err := loadValidating(t, `
+targets:
+  - name: x
+    url: http://x/metrics
+    auth:
+      bearer_token: abc
+      basic:
+        username: u
+        password: p
+`)
+	if err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("want mutually-exclusive error, got %v", err)
+	}
+}
+
+func TestValidate_AuthAuthorizationHeaderConflict(t *testing.T) {
+	err := loadValidating(t, `
+targets:
+  - name: x
+    url: http://x/metrics
+    auth:
+      bearer_token: abc
+      headers:
+        Authorization: Bearer other
+`)
+	if err == nil || !strings.Contains(err.Error(), "Authorization") {
+		t.Fatalf("want Authorization-conflict error, got %v", err)
+	}
+}
+
+func TestValidate_AuthOnlyHeadersAllowed(t *testing.T) {
+	if err := loadValidating(t, `
+targets:
+  - name: x
+    url: http://x/metrics
+    auth:
+      headers:
+        X-API-Key: k
+`); err != nil {
+		t.Fatalf("headers-only auth must be valid, got %v", err)
+	}
+}
+
+func TestValidate_TLSOnHTTPRejected(t *testing.T) {
+	err := loadValidating(t, `
+targets:
+  - name: x
+    url: http://x/metrics
+    tls:
+      insecure_skip_verify: true
+`)
+	if err == nil || !strings.Contains(err.Error(), "http") {
+		t.Fatalf("want http-not-allowed error, got %v", err)
+	}
+}
+
+func TestValidate_TLSCAFileMustExist(t *testing.T) {
+	err := loadValidating(t, `
+targets:
+  - name: x
+    url: https://x/metrics
+    tls:
+      ca_file: /nonexistent/path/ca.pem
+`)
+	if err == nil {
+		t.Fatal("want missing-ca-file error")
 	}
 }

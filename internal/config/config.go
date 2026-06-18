@@ -71,6 +71,8 @@ type TargetConfig struct {
 	Labels   map[string]string `yaml:"labels,omitempty"   doc:"Static labels attached to every sample scraped from this target."`
 	Keep     []string          `yaml:"keep,omitempty"     doc:"Regex allow-list of metric names; empty stores everything."`
 	Drop     []string          `yaml:"drop,omitempty"     doc:"Regex deny-list of metric names applied after keep."`
+	Auth     *AuthConfig       `yaml:"auth,omitempty"     doc:"Optional HTTP authentication for this target (bearer, basic, headers)."`
+	TLS      *TLSConfig        `yaml:"tls,omitempty"      doc:"Optional TLS settings for https:// targets (skip-verify, custom CA)."`
 }
 
 // DockerConfig groups every Docker-related capability. Both the
@@ -126,6 +128,35 @@ type DashboardsConfig struct {
 type AlertsConfig struct {
 	WebhookURL string      `yaml:"webhook_url" doc:"Outbound webhook URL the alerter POSTs to when a rule fires or resolves."`
 	Rules      []AlertRule `yaml:"rules"       doc:"Inline list of threshold alert rules evaluated on every tick."`
+}
+
+// AuthConfig declares HTTP authentication applied to a scrape target.
+//
+// BearerToken and Basic are mutually exclusive. Headers can be
+// combined with either form (or used alone). Authorization may not
+// appear inside Headers when BearerToken or Basic is also set,
+// because the resulting request would carry two conflicting auth
+// headers.
+type AuthConfig struct {
+	BearerToken string            `yaml:"bearer_token,omitempty" doc:"HTTP Bearer token sent as Authorization: Bearer <token>."`
+	Basic       *BasicAuthConfig  `yaml:"basic,omitempty"        doc:"HTTP Basic auth credentials; sent as Authorization: Basic base64(user:pass)."`
+	Headers     map[string]string `yaml:"headers,omitempty"      doc:"Arbitrary HTTP headers sent verbatim with every scrape request."`
+}
+
+// BasicAuthConfig holds the user/password pair for HTTP Basic auth.
+type BasicAuthConfig struct {
+	Username string `yaml:"username" doc:"HTTP Basic auth username."`
+	Password string `yaml:"password" doc:"HTTP Basic auth password."`
+}
+
+// TLSConfig customises TLS verification for one https:// scrape
+// target. CAFile, when set, replaces (does not append to) the system
+// root pool — the operator declares exactly which CAs are accepted.
+// InsecureSkipVerify disables certificate verification entirely;
+// intended for self-signed internal endpoints during development.
+type TLSConfig struct {
+	InsecureSkipVerify bool   `yaml:"insecure_skip_verify,omitempty" doc:"When true, the scraper accepts any TLS certificate; intended for self-signed internal endpoints."`
+	CAFile             string `yaml:"ca_file,omitempty"              doc:"Path to a PEM bundle of trusted CAs; replaces (not appends to) the system roots."`
 }
 
 // AlertRule is the simplest possible threshold rule: when expression

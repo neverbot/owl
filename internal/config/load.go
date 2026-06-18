@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
@@ -119,6 +120,12 @@ func Validate(c *Config) error {
 				return fmt.Errorf("targets[%d] (%s): drop[%d] %q: %w", i, t.Name, j, p, err)
 			}
 		}
+		if err := validateAuth(i, t); err != nil {
+			return err
+		}
+		if err := validateTLS(i, t); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -205,4 +212,55 @@ func parseSize(s string) (int64, error) {
 		}
 	}
 	return strconv.ParseInt(s, 10, 64)
+}
+
+// validateAuth enforces the cross-field rules on a target's optional
+// auth block. See AuthConfig for the full contract.
+func validateAuth(i int, t TargetConfig) error {
+	if t.Auth == nil {
+		return nil
+	}
+	a := t.Auth
+	if a.BearerToken != "" && a.Basic != nil {
+		return fmt.Errorf("targets[%d] (%s): auth bearer_token and basic are mutually exclusive", i, t.Name)
+	}
+	if a.Basic != nil {
+		if a.Basic.Username == "" {
+			return fmt.Errorf("targets[%d] (%s): auth.basic.username is required", i, t.Name)
+		}
+		if a.Basic.Password == "" {
+			return fmt.Errorf("targets[%d] (%s): auth.basic.password is required", i, t.Name)
+		}
+	}
+	if (a.BearerToken != "" || a.Basic != nil) && a.Headers != nil {
+		for k := range a.Headers {
+			if strings.EqualFold(k, "Authorization") {
+				return fmt.Errorf("targets[%d] (%s): auth.headers Authorization conflicts with bearer_token/basic", i, t.Name)
+			}
+		}
+	}
+	return nil
+}
+
+// validateTLS enforces the rules on a target's optional TLS block:
+// only valid on https:// URLs; ca_file must point to a readable PEM
+// that contains at least one certificate.
+func validateTLS(i int, t TargetConfig) error {
+	if t.TLS == nil {
+		return nil
+	}
+	if !strings.HasPrefix(t.URL, "https://") {
+		return fmt.Errorf("targets[%d] (%s): tls block not allowed on http URL", i, t.Name)
+	}
+	if t.TLS.CAFile != "" {
+		data, err := os.ReadFile(t.TLS.CAFile)
+		if err != nil {
+			return fmt.Errorf("targets[%d] (%s): tls.ca_file: %w", i, t.Name, err)
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(data) {
+			return fmt.Errorf("targets[%d] (%s): tls.ca_file %q: no certificates parsed", i, t.Name, t.TLS.CAFile)
+		}
+	}
+	return nil
 }
