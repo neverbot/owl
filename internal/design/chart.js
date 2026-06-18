@@ -147,6 +147,27 @@
     return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
   }
 
+  // parseQueries pulls the JSON-encoded query list off a panel article
+  // and returns it. Falls back to an empty array on missing attribute
+  // or malformed JSON so callers can early-return without throwing.
+  function parseQueries(panel) {
+    const raw = panel.dataset.queries;
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_e) {
+      return [];
+    }
+  }
+
+  // toJSON is the standard .ok ? .json() : null pipeline used by every
+  // /api/query and /data/*.json fetch. Kept here so the refresh paths
+  // can compose Promise.all chains without repeating it.
+  function toJSON(resp) {
+    return resp.ok ? resp.json() : null;
+  }
+
   // ────────────────────────────────────────────────────────────────────────
   // Chart rendering
 
@@ -537,7 +558,7 @@
   // panelStates[svg] = { seriesList, unit, geom..., cursorMs (or null) }
   var panelStates = new WeakMap();
 
-  function renderChart(svg, seriesList, unit, legendTemplate, domain) {
+  function renderChart(svg, seriesList, unit, domain) {
     clearChildren(svg);
     if (!seriesList.length) {
       panelStates.delete(svg);
@@ -704,7 +725,6 @@
     panelStates.set(svg, {
       seriesList: seriesList,
       unit: unit,
-      legendTemplate: legendTemplate || '',
       w: w,
       h: h,
       minX: minX,
@@ -756,15 +776,13 @@
   //     which are usually the same across every series of a panel)
   //   - "k=v k=v" when more than one label remains
   //   - the metric name when the series carries no labels at all
-  function labelFor(ser, legendTemplate) {
-    var labels = ser.labels || {};
-    if (legendTemplate) {
-      return legendTemplate.replace(
-        /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g,
-        (_, k) => labels[k] || '',
-      );
+  function labelFor(ser) {
+    const labels = ser.labels || {};
+    const tpl = ser.legendTemplate || '';
+    if (tpl) {
+      return tpl.replace(/\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g, (_, k) => labels[k] || '');
     }
-    var keys = Object.keys(labels).filter((k) => k !== 'job' && k !== 'instance');
+    let keys = Object.keys(labels).filter((k) => k !== 'job' && k !== 'instance');
     if (keys.length === 0) keys = Object.keys(labels);
     if (keys.length === 0) return ser.metric;
     if (keys.length === 1) return labels[keys[0]];
@@ -809,7 +827,7 @@
           class: 'hover-point hover-point--' + slot,
         }),
       );
-      rows.push({ slot: slot, label: labelFor(s, state.legendTemplate), value: pt[1], ts: pt[0] });
+      rows.push({ slot: slot, label: labelFor(s), value: pt[1], ts: pt[0] });
     }
     if (!rows.length) return;
 
@@ -942,58 +960,67 @@
       refreshStat(panel);
       return;
     }
-    var staticSrc = panel.dataset.static;
-    var expr = panel.dataset.expr;
-    if (!staticSrc && !expr) return;
+    const staticSrc = panel.dataset.static;
+    const queries = parseQueries(panel);
+    if (!staticSrc && queries.length === 0) return;
 
-    var unit = panel.dataset.unit || '';
-    var to = effectiveTo();
-    var from = to - currentWindowMs();
-    var step = effectiveStepMs();
+    const unit = panel.dataset.unit || '';
+    const to = effectiveTo();
+    const from = to - currentWindowMs();
+    const step = effectiveStepMs();
 
-    // The docs site ships pre-baked fixture JSON next to each page.
-    // Panels in those pages set data-static to the fixture URL and we
-    // skip the /api/query call entirely — the response shape is the
-    // same {series: [...]} envelope so the renderer is unchanged.
-    var url = staticSrc
-      ? staticSrc
-      : '/api/query?expr=' +
-        encodeURIComponent(expr) +
-        '&from=' +
-        from +
-        '&to=' +
-        to +
-        '&step=' +
-        step;
+    // Live panels fan out one fetch per declared query and Promise.all
+    // them so the chart sees every series in a single render. Static
+    // panels keep a single fetch (the fixture envelope is shaped like
+    // the /api/query response so the merger handles both uniformly).
+    const fetches = staticSrc
+      ? [fetch(staticSrc).then(toJSON)]
+      : queries.map((q) =>
+          fetch(
+            '/api/query?expr=' +
+              encodeURIComponent(q.expr) +
+              '&from=' +
+              from +
+              '&to=' +
+              to +
+              '&step=' +
+              step,
+          ).then(toJSON),
+        );
 
-    fetch(url)
-      .then((resp) => (resp.ok ? resp.json() : null))
-      .then((body) => {
-        if (!body) return;
-        var seriesList = (body.series || []).filter((s) => s?.points && s.points.length > 0);
-        var legendTemplate = panel.dataset.legend || '';
+    Promise.all(fetches)
+      .then((bodies) => {
+        const merged = [];
+        for (let i = 0; i < bodies.length; i++) {
+          const b = bodies[i];
+          if (!b?.series) continue;
+          // Both paths read the legend from the parsed queries array.
+          // Static panels carry a single-entry queries array emitted
+          // by the docs partial; live panels carry one entry per
+          // target.
+          const legend = queries[i] ? queries[i].legend || '' : '';
+          for (const s of b.series) {
+            if (!s?.points || s.points.length === 0) continue;
+            merged.push({ ...s, legendTemplate: legend });
+          }
+        }
 
-        var svg = panel.querySelector('.panel__chart');
-        // For static fixtures the on-disk timestamps live in the past;
-        // letting renderChart auto-fit the X domain from the data
-        // keeps the points inside the visible area. Live panels pass
-        // the picker's window so the axis reads "-Nh … now".
-        var dom = staticSrc ? null : { from: from, to: to };
-        if (svg) renderChart(svg, seriesList, unit, legendTemplate, dom);
+        const svg = panel.querySelector('.panel__chart');
+        const dom = staticSrc ? null : { from: from, to: to };
+        if (svg) renderChart(svg, merged, unit, dom);
 
-        var legend = panel.querySelector('.panel__legend');
-        if (legend) renderLegend(legend, seriesList, legendTemplate);
+        const legendEl = panel.querySelector('.panel__legend');
+        if (legendEl) renderLegend(legendEl, merged);
 
-        var valueEl = panel.querySelector('.panel__value');
+        const valueEl = panel.querySelector('.panel__value');
         if (valueEl) {
-          // The headline value only makes sense when the panel has a
-          // single series. In multi-series panels we'd be picking one
-          // arbitrarily — the legend already carries that info, so we
-          // hide the readout entirely and let the chart speak.
-          const multi = seriesList.length > 1;
+          // The headline only makes sense for single-series panels; for
+          // multi-series the legend already carries the per-series
+          // breakdown so the corner readout would be redundant.
+          const multi = merged.length > 1;
           valueEl.classList.toggle('panel__value--hidden', multi);
           if (!multi) {
-            const first = seriesList[0];
+            const first = merged[0];
             const lastPt = first ? first.points[first.points.length - 1] : null;
             const v = lastPt ? lastPt[1] : null;
             valueEl.textContent = fmt(v, unit);
@@ -1006,7 +1033,7 @@
       });
   }
 
-  function renderLegend(legendEl, seriesList, legendTemplate) {
+  function renderLegend(legendEl, seriesList) {
     clearChildren(legendEl);
     if (seriesList.length <= 1) return;
     for (let i = 0; i < seriesList.length; i++) {
@@ -1018,7 +1045,7 @@
       swatch.style.background = 'var(--series-' + slot + ')';
       item.appendChild(swatch);
       const label = document.createElement('span');
-      label.textContent = labelFor(seriesList[i], legendTemplate);
+      label.textContent = labelFor(seriesList[i]);
       item.appendChild(label);
       legendEl.appendChild(item);
     }
@@ -1056,8 +1083,9 @@
   // pick the first series only — stat panels are a one-number idiom.
   function refreshStat(panel) {
     const staticSrc = panel.dataset.static;
-    const expr = panel.dataset.expr;
-    if (!staticSrc && !expr) return;
+    const queries = parseQueries(panel);
+    if (!staticSrc && queries.length === 0) return;
+
     const unit = panel.dataset.unit || '';
     const calc = panel.dataset.calc || 'lastNotNull';
     const decimalsAttr = panel.dataset.decimals;
@@ -1066,18 +1094,24 @@
     const to = effectiveTo();
     const from = to - currentWindowMs();
     const step = effectiveStepMs();
+
+    // Stat panels are a one-number idiom; only the first query
+    // contributes a value. Multi-query stat is documented as an
+    // anti-pattern in dashboards.md.
+    const q = queries[0] || { expr: '', legend: '' };
     const url = staticSrc
       ? staticSrc
       : '/api/query?expr=' +
-        encodeURIComponent(expr) +
+        encodeURIComponent(q.expr) +
         '&from=' +
         from +
         '&to=' +
         to +
         '&step=' +
         step;
+
     fetch(url)
-      .then((resp) => (resp.ok ? resp.json() : null))
+      .then(toJSON)
       .then((body) => {
         if (!body) return;
         const seriesList = (body.series || []).filter((s) => s?.points && s.points.length > 0);
