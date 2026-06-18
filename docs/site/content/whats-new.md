@@ -10,6 +10,39 @@ rolling `:latest` tag is updated on every push to master. Anything
 that changes default behaviour, adds a config knob, or removes a
 feature shows up here.
 
+## 2026-06-18
+
+- **Authenticated scrape targets.** Per-target `auth` block supporting
+  bearer tokens, HTTP Basic and arbitrary headers, plus an optional
+  `tls` block (`insecure_skip_verify`, `ca_file`) for `https://`
+  endpoints. Any string in `config.yml` can carry a `${VAR}`,
+  `${VAR:-default}` or `file:/abs/path` reference; secrets resolve on
+  every load and every `SIGHUP` / `POST /-/reload`, so rotating a
+  `file:` secret needs no redeploy. 401 and 403 responses now produce
+  specialised error messages on `/targets` so the operator knows
+  exactly where to look. `/api/targets` JSON gains `last_status_code`
+  and `auth` fields. See [Authentication](/operating/authentication/)
+  for the full surface.
+- **Stat panels render real numbers.** Panels of `type: "stat"` (and
+  `type: "gauge"`, which currently renders the same way) collapse the
+  query result to a single big number via
+  `options.reduceOptions.calcs`. Supported calcs: `lastNotNull`
+  (default), `last`, `first`, `max`, `min`, `mean`, `sum`. Formatting
+  respects `fieldConfig.defaults.unit` and
+  `fieldConfig.defaults.decimals`. Multi-series queries render the
+  first series' reduced value; documented as an anti-pattern. `auth`
+  and `last_status_code` already shipped for scrape targets on the
+  same day.
+- **Stat panels with opt-in sparkline.** Set
+  `options.graphMode: "area"` and the stat panel layers a low-opacity
+  chart behind the headline, with its own Y/X axes (value min/max,
+  time range / "now"). Hovering the panel scrubs through the series:
+  the headline temporarily reads the value under the cursor, a
+  reserved slot underneath shows the time delta (so the number does
+  not shift on hover), a dashed crosshair and a per-series hover-point
+  match the convention used by the multi-line chart panels. See
+  [Stat panels](/dashboards/#stat-panels).
+
 ## 2026-06-09
 
 - New storage layer: per-sample disk footprint drops into the
