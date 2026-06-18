@@ -67,17 +67,73 @@ the chart; the rest of the dashboard still works.
 
 - **`timeseries`** — the default. SVG line chart with axes, a
   crosshair on hover, and a tooltip listing series sorted by value.
-- **`stat`** — a single big number for the latest sample. Suited to
+- **`stat`** — a single big number for the reduced sample. Suited to
   current goroutine count, currently firing alerts, samples in
-  storage.
-- **`gauge`** — a single value rendered against a min/max range.
-  Useful for capacity-style readings (disk used %, memory headroom).
+  storage. See **Stat panels** below for the reduction options.
+- **`gauge`** — renders the same way as `stat` in this version. Radial
+  and bar gauges are not implemented.
 
 For dense overviews, `timeseries` with multiple series remains the
 right default — owl's chart layer is designed to make many lines on
 one panel legible.
 
 {{> chart fixture=hero-multi-series expr="demo_signal" unit=ops title="Multi-series timeseries"}}
+
+## Stat panels
+
+Panels with `type: "stat"` (and `type: "gauge"`, which renders the
+same way) collapse the query result to a single big number instead of
+plotting a line. The reduction is driven by `options.reduceOptions.calcs`:
+
+| `calcs[0]`     | What owl shows                                                |
+|----------------|---------------------------------------------------------------|
+| `lastNotNull`  | Most recent non-null sample. **Default** when calcs is omitted.|
+| `last`         | Most recent sample, even if null — renders as `—`.            |
+| `first`        | Oldest sample in the range.                                   |
+| `max`          | Maximum across the range.                                     |
+| `min`          | Minimum across the range.                                     |
+| `mean`         | Arithmetic mean.                                              |
+| `sum`          | Sum.                                                          |
+
+Only the first entry in `calcs` is honoured. Unknown values fall back
+to `lastNotNull`.
+
+Formatting respects `fieldConfig.defaults.unit` (`bytes`, `s`, `ms`,
+`percent` and friends use owl's standard unit table) and
+`fieldConfig.defaults.decimals` for fixed precision. When `decimals`
+is omitted, owl picks 0 for numbers ≥ 100 and 1 otherwise, and inserts
+a thin-space thousands separator for large bare counters (`1 247`).
+
+When a query returns multiple series, owl renders the first series'
+reduced value. Multi-series stat is an anti-pattern for the one-number
+idiom — narrow the query (e.g. with `topk(1, ...)` or stricter label
+matchers) when you see this.
+
+### Opt-in sparkline
+
+Set `options.graphMode: "area"` to draw a thin, low-contrast line
+across the bottom half of the panel from the same data the number is
+reduced from. Default is no sparkline (`graphMode: "none"` or absent).
+
+```json
+{
+  "type": "stat",
+  "title": "Watchtower scans",
+  "options": {
+    "graphMode": "area",
+    "reduceOptions": { "calcs": ["lastNotNull"] }
+  },
+  "fieldConfig": {
+    "defaults": { "unit": "none", "decimals": 0 }
+  }
+}
+```
+
+### Empty state
+
+A panel whose reduction returns null, NaN, or an empty series renders
+an em-dash (`—`) in a muted colour. Network errors keep the previous
+render and surface the same way as on chart panels.
 
 ## Units
 
