@@ -381,7 +381,7 @@ func buildTargets(cfg config.Config) []scrape.Target {
 		for k, v := range t.Labels {
 			labels[k] = v
 		}
-		out = append(out, scrape.Target{
+		st := scrape.Target{
 			Name:     t.Name,
 			URL:      t.URL,
 			Interval: interval,
@@ -389,7 +389,29 @@ func buildTargets(cfg config.Config) []scrape.Target {
 			Labels:   labels,
 			Keep:     mustCompilePatterns(t.Keep),
 			Drop:     mustCompilePatterns(t.Drop),
-		})
+		}
+		if t.Auth != nil {
+			st.BearerToken = t.Auth.BearerToken
+			if t.Auth.Basic != nil {
+				st.BasicAuth = &scrape.BasicAuth{
+					Username: t.Auth.Basic.Username,
+					Password: t.Auth.Basic.Password,
+				}
+			}
+			if len(t.Auth.Headers) > 0 {
+				st.Headers = make(map[string]string, len(t.Auth.Headers))
+				for k, v := range t.Auth.Headers {
+					st.Headers[k] = v
+				}
+			}
+		}
+		if t.TLS != nil {
+			st.TLS = &scrape.TLSOptions{
+				InsecureSkipVerify: t.TLS.InsecureSkipVerify,
+				CAFile:             t.TLS.CAFile,
+			}
+		}
+		out = append(out, st)
 	}
 	return out
 }
