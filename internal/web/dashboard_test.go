@@ -30,7 +30,7 @@ func TestDashboardViewRendersHTML(t *testing.T) {
 	checks := [][]byte{
 		[]byte(`class="page-title">Alpha</h1>`),
 		[]byte(`class="panel`),
-		[]byte(`data-expr="metric_a"`),
+		[]byte(`data-queries='[{&#34;expr&#34;:&#34;metric_a&#34;,&#34;legend&#34;:&#34;&#34;}]'`),
 		[]byte(`data-status="supported"`),
 		[]byte(`data-unit=`),
 		[]byte(`data-panel-id=`),

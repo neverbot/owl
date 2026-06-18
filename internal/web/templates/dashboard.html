@@ -80,8 +80,7 @@
       <article
         class="panel{{if eq .Status "unsupported"}} panel--unsupported{{end}}{{if .IsStat}} panel--stat{{end}}"
         data-panel-id="{{.ID}}"
-        data-expr="{{.Expr}}"
-        data-legend="{{.Legend}}"
+        data-queries='{{.Queries}}'
         data-refresh="{{$.RefreshMS}}"
         data-unit="{{.Unit}}"
         data-status="{{.Status}}"
