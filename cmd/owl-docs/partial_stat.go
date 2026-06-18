@@ -51,10 +51,6 @@ func statPartial(args map[string]string) (string, error) {
 		// doesn't jump on hover), then the sparkline SVG.
 		tail = `<span class="panel__stat-time"></span><svg class="panel__sparkline" aria-hidden="true"></svg>`
 	}
-	unitSpan := ""
-	if unit != "" {
-		unitSpan = fmt.Sprintf(`<span class="panel__stat-unit">%s</span>`, unit)
-	}
 	queries := mustMarshalQueries([]chartQuery{{
 		Expr:   args["expr"],
 		Legend: args["legend"],
@@ -63,7 +59,7 @@ func statPartial(args map[string]string) (string, error) {
 	// multi-line output gets misread as a markdown code block when
 	// the line preceding any child is blank.
 	return fmt.Sprintf(
-		`<article class="panel panel--stat" data-static=%q data-queries='%s' data-unit=%q data-calc=%q data-decimals=%q data-graph-mode=%q data-refresh="0"><header class="panel__header"><h2 class="panel__title">%s</h2>%s</header><div class="panel__stat"><span class="panel__stat-value panel__stat-value--placeholder">—</span>%s%s</div></article>`,
+		`<article class="panel panel--stat" data-static=%q data-queries='%s' data-unit=%q data-calc=%q data-decimals=%q data-graph-mode=%q data-refresh="0"><header class="panel__header"><h2 class="panel__title">%s</h2>%s</header><div class="panel__stat"><span class="panel__stat-value panel__stat-value--placeholder">—</span>%s</div></article>`,
 		withBase("/data/"+name+".json"), queries, unit, calc, decimals, graphMode,
-		title, unitMarkup, unitSpan, tail), nil
+		title, unitMarkup, tail), nil
 }

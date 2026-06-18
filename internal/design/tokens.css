@@ -663,13 +663,6 @@ h3.page-title {
 .panel__stat-value--placeholder {
   color: var(--muted);
 }
-.panel__stat-unit {
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  color: var(--subtle);
-  position: relative;
-  z-index: 1;
-}
 /* The time slot always reserves a row of vertical space so the
    headline does not shift when hover toggles its visibility. */
 .panel__stat-time {
