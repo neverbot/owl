@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,17 +16,24 @@ type dashboardTemplateData struct {
 	Panels    []panelTemplateData
 }
 
+// panelQuery is one element of the data-queries JSON array; the
+// dashboard template ships these to chart.js, which fans out one
+// /api/query fetch per entry and merges the returned series.
+type panelQuery struct {
+	Expr   string `json:"expr"`
+	Legend string `json:"legend"`
+}
+
 // panelTemplateData is one row in the panel grid for the template.
 type panelTemplateData struct {
 	ID        string
 	Title     string
-	Expr      string
-	Legend    string // Grafana-style template, e.g. "{{name}}"
+	Queries   string // JSON-encoded [{expr, legend}, ...] in targets[] order
 	Unit      string
 	Status    string
 	Reason    string
 	IsStat    bool   // true for stat or gauge panels — template emits .panel__stat
-	Calc      string // reduction operator (e.g. "lastNotNull", "max"); empty when IsStat is false
+	Calc      string // reduction operator; empty when IsStat is false
 	Decimals  string // decimal places as decimal string, or "" when unset
 	GraphMode string // "area" turns on the sparkline; empty/none disables it
 	ColStart  int
@@ -77,12 +85,14 @@ func buildDashboardData(d *dashboards.Dashboard) dashboardTemplateData {
 
 	panels := make([]panelTemplateData, 0, len(d.Panels))
 	for _, p := range d.Panels {
-		expr := ""
-		legend := ""
-		if len(p.Targets) > 0 {
-			expr = p.Targets[0].Expr
-			legend = p.Targets[0].LegendFormat
+		queries := make([]panelQuery, 0, len(p.Targets))
+		for _, t := range p.Targets {
+			queries = append(queries, panelQuery{Expr: t.Expr, Legend: t.LegendFormat})
 		}
+		// json.Marshal of []panelQuery cannot fail in practice — the
+		// element struct is a flat string pair — so we drop the error.
+		qjson, _ := json.Marshal(queries)
+
 		decimals := ""
 		if p.Decimals != nil {
 			decimals = strconv.Itoa(*p.Decimals)
@@ -90,8 +100,7 @@ func buildDashboardData(d *dashboards.Dashboard) dashboardTemplateData {
 		panels = append(panels, panelTemplateData{
 			ID:        p.ID,
 			Title:     p.Title,
-			Expr:      expr,
-			Legend:    legend,
+			Queries:   string(qjson),
 			Unit:      p.Unit,
 			Status:    p.Support.Status,
 			Reason:    p.Support.Reason,

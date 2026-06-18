@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -168,5 +169,72 @@ func TestBuildDashboardData_TimeseriesIsNotStat(t *testing.T) {
 	got := buildDashboardData(d)
 	if got.Panels[0].IsStat {
 		t.Error("timeseries should set IsStat = false")
+	}
+}
+
+func TestBuildDashboardData_MultiTargetEmitsQueriesJSON(t *testing.T) {
+	d := &dashboards.Dashboard{
+		Panels: []dashboards.Panel{
+			{
+				ID:    "1",
+				Type:  "timeseries",
+				Title: "Updates & failures",
+				Targets: []dashboards.Target{
+					{Expr: "watchtower_containers_updated_count_total", LegendFormat: "updated"},
+					{Expr: "watchtower_containers_failed_total", LegendFormat: "failed"},
+				},
+				Support: dashboards.PanelSupport{Status: "supported"},
+			},
+		},
+	}
+	got := buildDashboardData(d)
+	if len(got.Panels) != 1 {
+		t.Fatalf("got %d panels, want 1", len(got.Panels))
+	}
+	var parsed []map[string]string
+	if err := json.Unmarshal([]byte(got.Panels[0].Queries), &parsed); err != nil {
+		t.Fatalf("Queries is not JSON: %v (raw: %q)", err, got.Panels[0].Queries)
+	}
+	if len(parsed) != 2 {
+		t.Fatalf("got %d queries, want 2", len(parsed))
+	}
+	if parsed[0]["expr"] != "watchtower_containers_updated_count_total" || parsed[0]["legend"] != "updated" {
+		t.Errorf("queries[0] = %+v, want {expr: updated_count_total, legend: updated}", parsed[0])
+	}
+	if parsed[1]["expr"] != "watchtower_containers_failed_total" || parsed[1]["legend"] != "failed" {
+		t.Errorf("queries[1] = %+v, want {expr: failed_total, legend: failed}", parsed[1])
+	}
+}
+
+func TestBuildDashboardData_SingleTargetStillEmitsArray(t *testing.T) {
+	d := &dashboards.Dashboard{
+		Panels: []dashboards.Panel{
+			{
+				ID:      "1",
+				Type:    "timeseries",
+				Targets: []dashboards.Target{{Expr: "up", LegendFormat: ""}},
+				Support: dashboards.PanelSupport{Status: "supported"},
+			},
+		},
+	}
+	got := buildDashboardData(d)
+	var parsed []map[string]string
+	if err := json.Unmarshal([]byte(got.Panels[0].Queries), &parsed); err != nil {
+		t.Fatalf("Queries is not JSON: %v", err)
+	}
+	if len(parsed) != 1 || parsed[0]["expr"] != "up" {
+		t.Fatalf("queries = %+v, want single up entry", parsed)
+	}
+}
+
+func TestBuildDashboardData_NoTargetsEmitsEmptyArray(t *testing.T) {
+	d := &dashboards.Dashboard{
+		Panels: []dashboards.Panel{
+			{ID: "1", Type: "timeseries", Support: dashboards.PanelSupport{Status: "supported"}},
+		},
+	}
+	got := buildDashboardData(d)
+	if got.Panels[0].Queries != "[]" {
+		t.Errorf("Queries = %q, want %q", got.Panels[0].Queries, "[]")
 	}
 }
