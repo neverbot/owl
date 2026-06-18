@@ -173,3 +173,25 @@ func TestHTTPClientCache_NilUsesDefault(t *testing.T) {
 		t.Fatal("nil TLSOptions must reuse http.DefaultClient (no allocation)")
 	}
 }
+
+func TestAuthShape(t *testing.T) {
+	cases := []struct {
+		name string
+		tgt  Target
+		want string
+	}{
+		{"none", Target{}, "none"},
+		{"bearer", Target{BearerToken: "x"}, "bearer"},
+		{"basic", Target{BasicAuth: &BasicAuth{Username: "u", Password: "p"}}, "basic"},
+		{"headers", Target{Headers: map[string]string{"X-K": "v"}}, "headers"},
+		{"bearer+headers", Target{BearerToken: "x", Headers: map[string]string{"X-K": "v"}}, "bearer+headers"},
+		{"basic+headers", Target{BasicAuth: &BasicAuth{Username: "u", Password: "p"}, Headers: map[string]string{"X-K": "v"}}, "basic+headers"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := authShape(c.tgt); got != c.want {
+				t.Fatalf("authShape(%s) = %q, want %q", c.name, got, c.want)
+			}
+		})
+	}
+}

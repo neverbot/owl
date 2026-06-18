@@ -175,6 +175,7 @@ type targetRow struct {
 	LastScrape string // human-readable relative time
 	Duration   string
 	Samples    int
+	Auth       string
 	Error      string
 }
 
@@ -185,7 +186,11 @@ func toTargetRow(h scrape.TargetHealth) targetRow {
 		Job:      h.Labels["job"],
 		Instance: h.Labels["instance"],
 		Samples:  h.LastSamples,
+		Auth:     h.Auth,
 		Error:    h.LastError,
+	}
+	if row.Auth == "" {
+		row.Auth = "none"
 	}
 	switch {
 	case h.LastScrape.IsZero():

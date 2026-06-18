@@ -44,6 +44,7 @@ type TargetHealth struct {
 	LastError      string            `json:"last_error,omitempty"`
 	LastSamples    int               `json:"last_samples"`
 	Duration       time.Duration     `json:"duration,omitempty"`
+	Auth           string            `json:"auth"`
 }
 
 type targetRunner struct {
@@ -104,6 +105,7 @@ func (m *Manager) recordHealth(tgt Target, samples int, code int, dur time.Durat
 	h.URL = tgt.URL
 	h.Interval = tgt.Interval
 	h.Labels = tgt.Labels
+	h.Auth = authShape(tgt)
 	h.LastScrape = time.Now()
 	h.LastSamples = samples
 	h.LastStatusCode = code
@@ -282,6 +284,27 @@ func buildHTTPClient(t *TLSOptions) *http.Client {
 	}
 	tr.TLSClientConfig = cfg
 	return &http.Client{Transport: tr}
+}
+
+// authShape returns a short label describing what auth a target uses,
+// without exposing values. Useful for the /targets UI and for the
+// /api/targets JSON.
+func authShape(t Target) string {
+	hasHeaders := len(t.Headers) > 0
+	switch {
+	case t.BearerToken != "" && hasHeaders:
+		return "bearer+headers"
+	case t.BearerToken != "":
+		return "bearer"
+	case t.BasicAuth != nil && hasHeaders:
+		return "basic+headers"
+	case t.BasicAuth != nil:
+		return "basic"
+	case hasHeaders:
+		return "headers"
+	default:
+		return "none"
+	}
 }
 
 // targetsEqual returns true if a and b represent the same scrape configuration,
