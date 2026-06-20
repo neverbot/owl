@@ -8,6 +8,21 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// openMemoryDB returns an in-memory SQLite handle with pragmas
+// applied. Used by the schema tests.
+func openMemoryDB(t *testing.T) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := ApplyPragmas(db); err != nil {
+		t.Fatalf("pragmas: %v", err)
+	}
+	return db
+}
+
 func openTempDB(t *testing.T) *sql.DB {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "owl.db")
@@ -88,5 +103,35 @@ func TestMigrateDropsLegacySchemaAndKeepsRunning(t *testing.T) {
 	}
 	if headCount != 0 {
 		t.Errorf("legacy samples not dropped: %d remaining", headCount)
+	}
+}
+
+// TestMigrateCreatesEventsTables asserts the events feature's two
+// tables (events, event_source_state) and their indexes exist after
+// a fresh migration.
+func TestMigrateCreatesEventsTables(t *testing.T) {
+	db := openMemoryDB(t)
+	if err := Migrate(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	for _, name := range []string{"events", "event_source_state"} {
+		var got string
+		err := db.QueryRow(
+			`SELECT name FROM sqlite_master WHERE type='table' AND name=?`,
+			name,
+		).Scan(&got)
+		if err != nil {
+			t.Fatalf("table %s missing: %v", name, err)
+		}
+	}
+	for _, idx := range []string{"events_ts", "events_source_ts"} {
+		var got string
+		err := db.QueryRow(
+			`SELECT name FROM sqlite_master WHERE type='index' AND name=?`,
+			idx,
+		).Scan(&got)
+		if err != nil {
+			t.Fatalf("index %s missing: %v", idx, err)
+		}
 	}
 }

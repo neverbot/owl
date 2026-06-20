@@ -14,9 +14,10 @@ import (
 //
 //	v0: initial schema (legacy samples(metric, labels, ts, value))
 //	v3: series + samples(WITHOUT ROWID) + chunks (current)
-const currentSchemaVersion = 3
+//	v4: + events, event_source_state
+const currentSchemaVersion = 4
 
-// schemaStatements creates the v3 schema from scratch. All statements
+// schemaStatements creates the v4 schema from scratch. All statements
 // are idempotent (IF NOT EXISTS) so Migrate can re-run safely.
 var schemaStatements = []string{
 	// One row per unique (metric, labels). Samples reference the id
@@ -63,6 +64,28 @@ var schemaStatements = []string{
 	// Secondary index over end_ts so EnforceTime can locate all
 	// chunks fully older than the cutoff in O(log n).
 	`CREATE INDEX IF NOT EXISTS idx_chunks_end_ts ON chunks (end_ts)`,
+
+	// Events: discrete occurrences emitted by external sources (e.g.
+	// GitHub deployments, CI runs, alert firings). id is a
+	// source-assigned opaque string; payload and render are JSON blobs.
+	`CREATE TABLE IF NOT EXISTS events (
+		id      TEXT PRIMARY KEY,
+		ts      INTEGER NOT NULL,
+		source  TEXT NOT NULL,
+		kind    TEXT NOT NULL,
+		payload TEXT NOT NULL,
+		render  TEXT NOT NULL
+	) STRICT`,
+	`CREATE INDEX IF NOT EXISTS events_ts ON events(ts)`,
+	`CREATE INDEX IF NOT EXISTS events_source_ts ON events(source, ts)`,
+
+	// event_source_state: per-source polling cursor so the event
+	// collector can resume from the last seen position after restart.
+	`CREATE TABLE IF NOT EXISTS event_source_state (
+		source     TEXT PRIMARY KEY,
+		cursor     TEXT NOT NULL,
+		updated_at INTEGER NOT NULL
+	) STRICT`,
 }
 
 // pragmas are applied once at open time. They configure SQLite for a
@@ -114,11 +137,15 @@ func Migrate(db *sql.DB) error {
 			`DROP TABLE IF EXISTS samples`,
 			`DROP TABLE IF EXISTS series`,
 			`DROP TABLE IF EXISTS chunks`,
+			`DROP TABLE IF EXISTS events`,
+			`DROP TABLE IF EXISTS event_source_state`,
 			// Older schemas may have left these indexes orphaned even
 			// without the table; clean them up too.
 			`DROP INDEX IF EXISTS idx_samples_metric_ts`,
 			`DROP INDEX IF EXISTS idx_samples_ts`,
 			`DROP INDEX IF EXISTS idx_chunks_end_ts`,
+			`DROP INDEX IF EXISTS events_ts`,
+			`DROP INDEX IF EXISTS events_source_ts`,
 		} {
 			if _, err := db.Exec(stmt); err != nil {
 				return fmt.Errorf("drop: %w", err)
