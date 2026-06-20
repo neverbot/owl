@@ -23,14 +23,14 @@ type grafanaTime struct {
 
 type grafanaPanel struct {
 	// ID may be an integer or a string in Grafana JSON.
-	ID          json.RawMessage      `json:"id"`
-	Type        string               `json:"type"`
-	Title       string               `json:"title"`
-	GridPos     grafanaGridPos       `json:"gridPos"`
-	FieldConfig grafanaFieldCfg      `json:"fieldConfig"`
-	Options     grafanaOptions       `json:"options"`
-	Targets     []grafanaTarget      `json:"targets"`
-	Annotations []grafanaAnnotation  `json:"annotations"`
+	ID          json.RawMessage     `json:"id"`
+	Type        string              `json:"type"`
+	Title       string              `json:"title"`
+	GridPos     grafanaGridPos      `json:"gridPos"`
+	FieldConfig grafanaFieldCfg     `json:"fieldConfig"`
+	Options     grafanaOptions      `json:"options"`
+	Targets     []grafanaTarget     `json:"targets"`
+	Annotations []grafanaAnnotation `json:"annotations"`
 }
 
 type grafanaGridPos struct {

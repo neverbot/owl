@@ -77,11 +77,11 @@ type targetsTemplateData struct {
 }
 
 type containerRow struct {
-	Name           string
-	Compose        string // "service · project" when present
-	Image          string
-	Memory         string
-	LastSeen       string
+	Name     string
+	Compose  string // "service · project" when present
+	Image    string
+	Memory   string
+	LastSeen string
 }
 
 func toContainerRow(ci ContainerInfo) containerRow {

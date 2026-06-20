@@ -245,12 +245,12 @@ func TestBuildDashboardDataEventsPanel(t *testing.T) {
 	d := &dashboards.Dashboard{
 		Title: "x",
 		Panels: []dashboards.Panel{{
-			ID:    "1",
-			Type:  "events",
-			Title: "ev",
-			GridPos: dashboards.GridPos{W: 24, H: 8},
+			ID:           "1",
+			Type:         "events",
+			Title:        "ev",
+			GridPos:      dashboards.GridPos{W: 24, H: 8},
 			EventTargets: []dashboards.EventTarget{{Source: "a", Kind: "k"}},
-			Support: dashboards.PanelSupport{Status: "supported"},
+			Support:      dashboards.PanelSupport{Status: "supported"},
 		}},
 	}
 	data := buildDashboardData(d)

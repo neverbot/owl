@@ -42,16 +42,16 @@ type Annotation struct {
 
 // Panel is one panel extracted from a Grafana dashboard.
 type Panel struct {
-	ID           string       // Grafana panel id coerced to string
+	ID           string // Grafana panel id coerced to string
 	Title        string
 	Type         string // raw type from JSON ("timeseries", "stat", "gauge", "events", or other)
 	GridPos      GridPos
 	Targets      []Target
-	Unit         string       // fieldConfig.defaults.unit
-	Decimals     *int         // fieldConfig.defaults.decimals; nil when unset
-	Calc         string       // options.reduceOptions.calcs[0]; "lastNotNull" when unset
-	GraphMode    string       // options.graphMode; "" when unset (no sparkline)
-	Support      PanelSupport // result of consulting Capabilities
+	Unit         string        // fieldConfig.defaults.unit
+	Decimals     *int          // fieldConfig.defaults.decimals; nil when unset
+	Calc         string        // options.reduceOptions.calcs[0]; "lastNotNull" when unset
+	GraphMode    string        // options.graphMode; "" when unset (no sparkline)
+	Support      PanelSupport  // result of consulting Capabilities
 	EventTargets []EventTarget // panels of type=events; empty means all events in window
 	Annotations  []Annotation  // event overlays on timeseries panels
 }
