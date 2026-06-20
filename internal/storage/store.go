@@ -59,6 +59,10 @@ func Open(path string) (*Store, error) {
 	return &Store{db: db, path: path, series: cache}, nil
 }
 
+// DB returns the underlying *sql.DB so adjacent subsystems (events
+// store) can reuse the same single-writer connection.
+func (s *Store) DB() *sql.DB { return s.db }
+
 // Close closes the underlying database handle.
 func (s *Store) Close() error {
 	if s.series != nil {
