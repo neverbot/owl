@@ -13,7 +13,10 @@ vertical annotations over timeseries panels.
 
 ## Configuration
 
-Enable the subsystem and declare one or more sources:
+Enable the subsystem and declare one or more sources. The example
+below tracks watchtower's image-update events; watchtower emits
+[logfmt](https://brandur.org/logfmt) by default, so we parse it as
+such:
 
 ```yaml
 events:
@@ -24,7 +27,7 @@ events:
       container: watchtower
       from: 1m
       interval: 30s
-      format: json
+      format: logfmt
       match:
         - field: msg
           contains: "Found new image"
@@ -37,6 +40,9 @@ events:
           to: "$.new_image"
       render: "{{.container}} updated {{.from}} → {{.to}}"
 ```
+
+If your watchtower is configured with `--log-format json`, switch
+`format` to `json` — every other field stays identical.
 
 ## Drivers
 
@@ -56,8 +62,14 @@ Cursor: RFC3339Nano timestamp of the last line seen. Requires the
 ## Formats
 
 - `json` — each line is a JSON object.
+- `logfmt` — each line is a sequence of `key=value` pairs (bare
+  values terminated by whitespace; quoted values support `\n`,
+  `\t`, `\r`, `\\`, and `\"` escapes). The de-facto format emitted
+  by watchtower, prometheus, alertmanager, and most Go daemons.
+  Type inference is not performed — every value is a string.
 - `regex` — each line is matched against `pattern`; named captures
-  populate the parsed record.
+  populate the parsed record. Use this as the escape hatch for
+  formats that aren't json or logfmt.
 - `plain` — each line becomes `{"line": "..."}`; useful for simple
   template-only rendering.
 

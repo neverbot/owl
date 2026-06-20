@@ -14,10 +14,15 @@ feature shows up here.
 
 - **Events.** Owl gains a second data type alongside numeric
   samples: discrete events with structured payload. Two drivers
-  in v1 (`file_tail`, `docker_logs`), a new tabular events panel,
-  and vertical annotations on timeseries panels. Opt-in via
-  `events.enabled: true`. See [Events](/operating/events/) for the
-  full reference.
+  in v1 (`file_tail`, `docker_logs`), four parser formats
+  (`json`, `logfmt`, `regex`, `plain`), a new tabular events
+  panel, and vertical annotations on timeseries panels. Opt-in
+  via `events.enabled: true`. See [Events](/operating/events/)
+  for the full reference.
+- **Legend fix on timeseries.** Timeseries panels without
+  `annotations` were silently swallowing the legend render
+  because the empty annotation payload threw inside the chart
+  pipeline. Multi-series legends now render again.
 
 ## 2026-06-18
 
