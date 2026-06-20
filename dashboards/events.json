@@ -1,0 +1,32 @@
+{
+  "title": "Events",
+  "uid": "owl-events",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "events",
+      "title": "Recent events",
+      "description": "Every event ingested in the last hour, newest first.",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 10 },
+      "targets": []
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Goroutines (with events overlay)",
+      "description": "Owl's goroutine count with event annotations as vertical marks.",
+      "gridPos": { "x": 0, "y": 10, "w": 24, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0 } },
+      "targets": [
+        { "refId": "A", "expr": "owl_goroutines", "legendFormat": "goroutines" }
+      ],
+      "annotations": [{}]
+    }
+  ]
+}
