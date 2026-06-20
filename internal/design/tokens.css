@@ -872,6 +872,8 @@ button:focus-visible {
 .panel__events table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .panel__events th { text-align: left; font-weight: 500; color: var(--muted); padding: 4px 8px; }
 .panel__events td { padding: 4px 8px; border-top: 1px solid var(--rule); }
+.panel__events tbody tr { transition: background-color var(--t-fast) var(--ease-out); }
+.panel__events tbody tr:hover { background: var(--bg); }
 .panel__events-time { font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
 .panel__events-kind { color: var(--muted); white-space: nowrap; }
 .panel__events-render { color: var(--fg); }
