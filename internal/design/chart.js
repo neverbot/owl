@@ -276,7 +276,11 @@
 
   function repaintAll() {
     document.querySelectorAll('.panel').forEach((p) => {
-      if (p.dataset.status !== 'unsupported') refreshPanel(p);
+      if (p.dataset.eventTargets !== undefined) {
+        refreshEvents(p);
+      } else if (p.dataset.status !== 'unsupported') {
+        refreshPanel(p);
+      }
     });
   }
 
@@ -952,6 +956,142 @@
   }
 
   // ────────────────────────────────────────────────────────────────────────
+  // Events panel polling
+
+  // refreshEvents fans out one /api/events request per events panel
+  // and rewrites the panel's <tbody> with the result. Pagination is
+  // client-side: at most 50 rows are mounted at once; vertical scroll
+  // inside the panel handles overflow.
+  function refreshEvents(panel) {
+    var raw = panel.getAttribute('data-event-targets') || '[]';
+    var targets = [];
+    try {
+      targets = JSON.parse(raw);
+    } catch (_e) {
+      targets = [];
+    }
+    var qs = ['limit=50'];
+    targets.forEach((t) => {
+      if (t.source) qs.push('source=' + encodeURIComponent(t.source));
+      if (t.kind) qs.push('kind=' + encodeURIComponent(t.kind));
+    });
+    var now = effectiveTo();
+    qs.push('from=' + (now - currentWindowMs()));
+    qs.push('to=' + now);
+    fetch('/api/events?' + qs.join('&'))
+      .then((r) => r.json())
+      .then((body) => {
+        var tbody = panel.querySelector('.panel__events tbody');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        (body.events || []).forEach((ev) => {
+          var tr = document.createElement('tr');
+          var d = new Date(ev.ts).toISOString().replace('T', ' ').slice(0, 19);
+          tr.innerHTML =
+            '<td class="panel__events-time">' +
+            d +
+            '</td>' +
+            '<td class="panel__events-kind">' +
+            escapeHTML(ev.source) +
+            ' / ' +
+            escapeHTML(ev.kind) +
+            '</td>' +
+            '<td class="panel__events-render">' +
+            escapeHTML(ev.render) +
+            '</td>';
+          tbody.appendChild(tr);
+        });
+      })
+      .catch(() => {
+        /* keep last successful render */
+      });
+  }
+
+  // escapeHTML returns text safe to interpolate into innerHTML.
+  function escapeHTML(s) {
+    if (s == null) return '';
+    return String(s).replace(
+      /[&<>"']/g,
+      (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
+    );
+  }
+
+  // drawAnnotations reads data-annotations ([{source,kind},...]),
+  // fetches matching events in the current window, and draws 1px
+  // vertical lines behind the data line. fromMS and toMS are the
+  // visible time window edges in unix milliseconds, matching the
+  // values used by the enclosing refreshPanel call.
+  function drawAnnotations(panel, svg, fromMS, toMS) {
+    var raw = panel.getAttribute('data-annotations');
+    if (!raw) return;
+    var anns = [];
+    try {
+      anns = JSON.parse(raw);
+    } catch (_e) {
+      return;
+    }
+    if (!anns.length) return;
+    var qs = ['limit=200', 'from=' + fromMS, 'to=' + toMS];
+    anns.forEach((a) => {
+      if (a.source) qs.push('source=' + encodeURIComponent(a.source));
+      if (a.kind) qs.push('kind=' + encodeURIComponent(a.kind));
+    });
+    fetch('/api/events?' + qs.join('&'))
+      .then((r) => r.json())
+      .then((body) => {
+        var prev = svg.querySelector('.panel__annot-group');
+        if (prev) prev.remove();
+        var w = svg.clientWidth || 600;
+        var h = svg.clientHeight || 140;
+        var innerW = w - PAD.left - PAD.right;
+        var innerH = h - PAD.top - PAD.bottom;
+        var range = toMS - fromMS || 1;
+        function scaleX(ts) {
+          return PAD.left + ((ts - fromMS) / range) * innerW;
+        }
+        var g = document.createElementNS(SVG_NS, 'g');
+        g.setAttribute('class', 'panel__annot-group');
+        svg.insertBefore(g, svg.firstChild);
+        (body.events || []).forEach((ev) => {
+          var x = scaleX(ev.ts);
+          if (x < PAD.left || x > PAD.left + innerW) return;
+          var line = document.createElementNS(SVG_NS, 'line');
+          line.setAttribute('x1', x);
+          line.setAttribute('x2', x);
+          line.setAttribute('y1', PAD.top);
+          line.setAttribute('y2', PAD.top + innerH);
+          line.setAttribute('class', 'panel__annot-line');
+          line.setAttribute('stroke', paletteSlotFor(ev.source));
+          g.appendChild(line);
+          var hot = document.createElementNS(SVG_NS, 'rect');
+          hot.setAttribute('x', x - 3);
+          hot.setAttribute('width', 6);
+          hot.setAttribute('y', PAD.top);
+          hot.setAttribute('height', innerH);
+          hot.setAttribute('class', 'panel__annot-zone');
+          var title = document.createElementNS(SVG_NS, 'title');
+          title.textContent = new Date(ev.ts).toISOString() + '\n' + (ev.render || '');
+          hot.appendChild(title);
+          g.appendChild(hot);
+        });
+      })
+      .catch(() => {
+        /* leave the previous overlay in place */
+      });
+  }
+
+  // paletteSlotFor hashes a source name to one of the 12 OKLCH series
+  // slots defined by tokens.css (--series-1..--series-12). Identical
+  // names map to identical colours across reloads.
+  function paletteSlotFor(name) {
+    var h = 0;
+    var i;
+    for (i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
+    var slot = (Math.abs(h) % 12) + 1;
+    return 'var(--series-' + slot + ')';
+  }
+
+  // ────────────────────────────────────────────────────────────────────────
   // Polling
 
   function refreshPanel(panel) {
@@ -1007,7 +1147,10 @@
 
         const svg = panel.querySelector('.panel__chart');
         const dom = staticSrc ? null : { from: from, to: to };
-        if (svg) renderChart(svg, merged, unit, dom);
+        if (svg) {
+          renderChart(svg, merged, unit, dom);
+          if (!staticSrc) drawAnnotations(panel, svg, from, to);
+        }
 
         const legendEl = panel.querySelector('.panel__legend');
         if (legendEl) renderLegend(legendEl, merged);
@@ -1055,7 +1198,8 @@
     document.querySelectorAll('.panel').forEach((panel) => {
       if (panel.dataset.status === 'unsupported') return;
       const isStat = panel.classList.contains('panel--stat');
-      if (!isStat) {
+      const isEvents = panel.dataset.eventTargets !== undefined;
+      if (!isStat && !isEvents) {
         const svg = panel.querySelector('.panel__chart');
         if (svg) bindChartInteractions(svg);
       }
@@ -1067,9 +1211,17 @@
       function tick() {
         if (document.visibilityState === 'hidden') return;
         if (!isLive()) return; // historic mode: data is frozen, skip the fetch
+        if (isEvents) {
+          refreshEvents(panel);
+        } else {
+          refreshPanel(panel);
+        }
+      }
+      if (isEvents) {
+        refreshEvents(panel);
+      } else {
         refreshPanel(panel);
       }
-      refreshPanel(panel);
       if (raw !== undefined && parsed === 0) return;
       var interval = Math.max(parsed || DEFAULT_REFRESH_MS, MIN_REFRESH_MS);
       setInterval(tick, interval);
