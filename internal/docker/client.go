@@ -13,6 +13,7 @@ package docker
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -136,6 +137,69 @@ func (c *Client) ContainerStats(ctx context.Context, id string) (*Stats, error) 
 	}
 	return &out, nil
 }
+
+// ContainerLogs streams stdout+stderr for one container as a single
+// newline-separated byte sequence. Each line is prefixed with an
+// RFC3339Nano timestamp emitted by the daemon (timestamps=true).
+// since, when non-empty, is forwarded to the daemon as the
+// ?since=<unix-seconds> parameter and limits returned lines to those
+// strictly after that instant.
+func (c *Client) ContainerLogs(ctx context.Context, name, since string) (io.ReadCloser, error) {
+	q := "stdout=true&stderr=true&timestamps=true&follow=false"
+	if since != "" {
+		if t, err := time.Parse(time.RFC3339Nano, since); err == nil {
+			q += fmt.Sprintf("&since=%d", t.Unix())
+		}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		"http://"+c.host+"/containers/"+name+"/logs?"+q, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("docker logs %s: %w", name, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		_ = resp.Body.Close()
+		return nil, fmt.Errorf("docker logs %s: status %d: %s", name, resp.StatusCode, string(body))
+	}
+	return newDemuxReader(resp.Body), nil
+}
+
+// demuxReader strips Docker's 8-byte stream-multiplexing header
+// ([STREAM_TYPE, 0, 0, 0, BE_UINT32_SIZE]) from each frame on a
+// non-TTY logs stream, exposing only the payload bytes.
+type demuxReader struct {
+	r       io.ReadCloser
+	pending int
+}
+
+// newDemuxReader wraps r so subsequent Reads return only payload bytes.
+func newDemuxReader(r io.ReadCloser) *demuxReader { return &demuxReader{r: r} }
+
+// Read consumes frame headers as needed and copies up to len(p)
+// bytes of payload into p.
+func (d *demuxReader) Read(p []byte) (int, error) {
+	for d.pending == 0 {
+		var hdr [8]byte
+		if _, err := io.ReadFull(d.r, hdr[:]); err != nil {
+			return 0, err
+		}
+		d.pending = int(binary.BigEndian.Uint32(hdr[4:8]))
+	}
+	n := len(p)
+	if n > d.pending {
+		n = d.pending
+	}
+	nn, err := d.r.Read(p[:n])
+	d.pending -= nn
+	return nn, err
+}
+
+// Close closes the underlying response body.
+func (d *demuxReader) Close() error { return d.r.Close() }
 
 // get issues a GET request to the daemon and decodes the JSON body.
 func (c *Client) get(ctx context.Context, path string, out any) error {

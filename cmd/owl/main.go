@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -22,6 +23,8 @@ import (
 	"github.com/neverbot/owl/internal/config"
 	"github.com/neverbot/owl/internal/dashboards"
 	"github.com/neverbot/owl/internal/docker"
+	"github.com/neverbot/owl/internal/events"
+	"github.com/neverbot/owl/internal/events/drivers"
 	"github.com/neverbot/owl/internal/query"
 	"github.com/neverbot/owl/internal/scrape"
 	"github.com/neverbot/owl/internal/storage"
@@ -222,6 +225,61 @@ func run(cfg config.Config, configPath string) error {
 		slog.Info("alerter started", "rules", n)
 	}
 
+	// Events manager: one goroutine per source, hot-reloadable like
+	// scrape targets. Disabled by default — opt in with events.enabled.
+	var eventsMgr *events.Manager
+	buildEventSources := func(c config.Config, dockerCli *docker.Client) ([]events.Source, error) {
+		out := make([]events.Source, 0, len(c.Events.Sources))
+		for _, src := range c.Events.Sources {
+			var drv events.Driver
+			switch src.Driver {
+			case "file_tail":
+				drv = drivers.NewFileTail(src.Name, src.Path, src.From)
+			case "docker_logs":
+				if dockerCli == nil {
+					return nil, fmt.Errorf("events source %q: docker_logs requires docker.enabled", src.Name)
+				}
+				drv = drivers.NewDockerLogs(src.Name, src.Container, dockerLogsAdapter{dockerCli})
+			default:
+				return nil, fmt.Errorf("events source %q: unknown driver %q", src.Name, src.Driver)
+			}
+			var re *regexp.Regexp
+			if src.Format == "regex" {
+				re = regexp.MustCompile(src.Pattern)
+			}
+			tpl, err := events.CompileTemplate(src.Name, src.Render)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, events.Source{
+				Name:     src.Name,
+				Driver:   drv,
+				Interval: src.Interval,
+				Format:   src.Format,
+				Pattern:  re,
+				Match:    src.Match,
+				Mapping:  src.Mapping,
+				Template: tpl,
+			})
+		}
+		return out, nil
+	}
+	if cfg.Events.Enabled {
+		eventsStore := events.NewStore(store.DB())
+		eventsMgr = events.NewManager(eventsStore)
+		var dcli *docker.Client
+		if cfg.Docker.Enabled {
+			dcli = docker.NewClient(cfg.Docker.SocketPath)
+		}
+		srcs, err := buildEventSources(cfg, dcli)
+		if err != nil {
+			return fmt.Errorf("events: %w", err)
+		}
+		eventsMgr.SetSources(srcs)
+		spawn(func() { eventsMgr.Run(ctx) })
+		slog.Info("events manager started", "sources", len(srcs))
+	}
+
 	// Dashboard loader.
 	dashLoader := dashboards.NewLoader(cfg.Dashboards.Dir, engine)
 	if err := dashLoader.Reload(); err != nil {
@@ -260,6 +318,17 @@ func run(cfg config.Config, configPath string) error {
 			newWebhook = alert.NewHTTPWebhook(newCfg.Alerts.WebhookURL)
 		}
 		alerter.SetWebhook(newWebhook)
+		if eventsMgr != nil {
+			var dcli *docker.Client
+			if newCfg.Docker.Enabled {
+				dcli = docker.NewClient(newCfg.Docker.SocketPath)
+			}
+			srcs, err := buildEventSources(newCfg, dcli)
+			if err != nil {
+				return fmt.Errorf("events: %w", err)
+			}
+			eventsMgr.SetSources(srcs)
+		}
 		slog.Info("reloaded",
 			"targets", len(newYaml),
 			"rules", len(newCfg.Alerts.Rules),
@@ -568,6 +637,18 @@ func (a containersAdapter) ContainersSnapshot() []web.ContainerInfo {
 		})
 	}
 	return out
+}
+
+// dockerLogsAdapter satisfies events/drivers.LogsClient against an
+// internal/docker.Client without leaking the docker dependency into
+// the events package.
+type dockerLogsAdapter struct{ c *docker.Client }
+
+// ContainerLogs fetches stdout+stderr for one container, optionally
+// filtered by since (RFC3339Nano), with embedded timestamps so the
+// driver can parse the per-line stamp into Record.RawTS.
+func (a dockerLogsAdapter) ContainerLogs(ctx context.Context, container, since string) (io.ReadCloser, error) {
+	return a.c.ContainerLogs(ctx, container, since)
 }
 
 func ensureDir(path string) error {
