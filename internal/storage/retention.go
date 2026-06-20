@@ -22,7 +22,7 @@ import (
 func EnforceTime(s *Store, keep time.Duration, now int64) (int64, error) {
 	cutoff := now - keep.Milliseconds()
 
-	// Probe both head and chunks. Either being non-empty is enough to
+	// Probe head, chunks, and events. Any being non-empty is enough to
 	// justify the DELETE.
 	var probe int
 	probeErr := s.db.QueryRow(`SELECT 1 FROM samples WHERE ts < ? LIMIT 1`, cutoff).Scan(&probe)
@@ -35,7 +35,16 @@ func EnforceTime(s *Store, keep time.Duration, now int64) (int64, error) {
 	if probeErr != nil && probeErr != sql.ErrNoRows {
 		return 0, fmt.Errorf("probe chunks: %w", probeErr)
 	}
-	if !headEligible && !chunksEligible {
+	// Events share the retention window with samples. Probe before
+	// DELETE so the common case (no rows older than cutoff) costs one
+	// index seek.
+	var ev int
+	evErr := s.db.QueryRow(`SELECT 1 FROM events WHERE ts < ? LIMIT 1`, cutoff).Scan(&ev)
+	if evErr != nil && evErr != sql.ErrNoRows {
+		return 0, fmt.Errorf("probe events: %w", evErr)
+	}
+	evEligible := evErr == nil
+	if !headEligible && !chunksEligible && !evEligible {
 		return 0, nil
 	}
 
@@ -61,6 +70,15 @@ func EnforceTime(s *Store, keep time.Duration, now int64) (int64, error) {
 		res, err := s.db.Exec(`DELETE FROM samples WHERE ts < ?`, cutoff)
 		if err != nil {
 			return totalDeleted, fmt.Errorf("enforce time head: %w", err)
+		}
+		n, _ := res.RowsAffected()
+		totalDeleted += n
+	}
+
+	if evEligible {
+		res, err := s.db.Exec(`DELETE FROM events WHERE ts < ?`, cutoff)
+		if err != nil {
+			return totalDeleted, fmt.Errorf("enforce time events: %w", err)
 		}
 		n, _ := res.RowsAffected()
 		totalDeleted += n

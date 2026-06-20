@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -93,6 +94,34 @@ func TestEnforceSizeDeletesOldestUntilUnderCap(t *testing.T) {
 	first := series[0].Points[0].TS
 	if first == 0 {
 		t.Errorf("oldest row (ts=0) still present after size enforcement")
+	}
+}
+
+// TestEnforceTimeDeletesEvents asserts that events older than the
+// retention cutoff are deleted alongside samples.
+func TestEnforceTimeDeletesEvents(t *testing.T) {
+	s := newStore(t)
+	now := int64(1_700_000_000_000)
+	// Insert one old and one fresh event directly.
+	for i, ts := range []int64{now - 2*int64(time.Hour/time.Millisecond), now} {
+		_, err := s.db.Exec(
+			`INSERT INTO events (id, ts, source, kind, payload, render)
+             VALUES (?, ?, 'test', 'k', '{}', '')`,
+			fmt.Sprintf("id-%d", i), ts,
+		)
+		if err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+	}
+	if _, err := EnforceTime(s, time.Hour, now); err != nil {
+		t.Fatalf("enforce: %v", err)
+	}
+	var remaining int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM events`).Scan(&remaining); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if remaining != 1 {
+		t.Fatalf("want 1 event remaining, got %d", remaining)
 	}
 }
 
