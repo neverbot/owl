@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// TestParse covers the three formats and one malformed-input case.
+// TestParse covers the four formats and one malformed-input case.
 func TestParse(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -47,6 +47,49 @@ func TestParse(t *testing.T) {
 			line:   "hello world",
 			format: "plain",
 			want:   map[string]any{"line": "hello world"},
+		},
+		{
+			name:   "logfmt bare",
+			line:   `level=info container=nginx count=42`,
+			format: "logfmt",
+			want:   map[string]any{"level": "info", "container": "nginx", "count": "42"},
+		},
+		{
+			name:   "logfmt quoted with spaces",
+			line:   `level=info msg="Found new image" container=nginx`,
+			format: "logfmt",
+			want:   map[string]any{"level": "info", "msg": "Found new image", "container": "nginx"},
+		},
+		{
+			name:   "logfmt escapes",
+			line:   `msg="say \"hi\"\nbye"`,
+			format: "logfmt",
+			want:   map[string]any{"msg": "say \"hi\"\nbye"},
+		},
+		{
+			name:   "logfmt watchtower-style",
+			line:   `time="2026-06-20T10:30:00Z" level=info msg="Found new image" container=nginx old_image=nginx:1.2.3 new_image=nginx:1.2.4`,
+			format: "logfmt",
+			want: map[string]any{
+				"time":      "2026-06-20T10:30:00Z",
+				"level":     "info",
+				"msg":       "Found new image",
+				"container": "nginx",
+				"old_image": "nginx:1.2.3",
+				"new_image": "nginx:1.2.4",
+			},
+		},
+		{
+			name:   "logfmt empty value",
+			line:   `a= b=2`,
+			format: "logfmt",
+			want:   map[string]any{"a": "", "b": "2"},
+		},
+		{
+			name:   "logfmt bare key",
+			line:   `flag verbose=true`,
+			format: "logfmt",
+			want:   map[string]any{"flag": "", "verbose": "true"},
 		},
 	}
 	for _, tt := range tests {

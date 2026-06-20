@@ -247,9 +247,9 @@ func validateEvents(c *Config) error {
 			return fmt.Errorf("events.sources[%d] (%s): unknown driver %q (want file_tail or docker_logs)", i, src.Name, src.Driver)
 		}
 		switch src.Format {
-		case "json", "regex", "plain":
+		case "json", "logfmt", "regex", "plain":
 		default:
-			return fmt.Errorf("events.sources[%d] (%s): unknown format %q (want json, regex or plain)", i, src.Name, src.Format)
+			return fmt.Errorf("events.sources[%d] (%s): unknown format %q (want json, logfmt, regex or plain)", i, src.Name, src.Format)
 		}
 		if src.Format == "regex" {
 			if src.Pattern == "" {
