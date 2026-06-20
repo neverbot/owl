@@ -14,6 +14,7 @@ type Config struct {
 	Host       HostConfig       `yaml:"host"       doc:"Linux host collector reading /proc and /sys."`
 	Dashboards DashboardsConfig `yaml:"dashboards" doc:"Where dashboard JSON files live, plus optional mtime watcher."`
 	Alerts     AlertsConfig     `yaml:"alerts"     doc:"Threshold alert rules and the webhook delivery target."`
+	Events     EventsConfig     `yaml:"events"     doc:"Events ingestion stack (file_tail and docker_logs sources)."`
 }
 
 // StorageConfig controls the SQLite store and retention policy.
@@ -157,6 +158,51 @@ type BasicAuthConfig struct {
 type TLSConfig struct {
 	InsecureSkipVerify bool   `yaml:"insecure_skip_verify,omitempty" doc:"When true, the scraper accepts any TLS certificate; intended for self-signed internal endpoints."`
 	CAFile             string `yaml:"ca_file,omitempty"              doc:"Path to a PEM bundle of trusted CAs; replaces (not appends to) the system roots."`
+}
+
+// EventsConfig holds the events ingestion stack. Disabled by default;
+// the events.Manager constructor is only invoked when Enabled is true.
+type EventsConfig struct {
+	Enabled bool                `yaml:"enabled"          doc:"Master switch for the events ingestion stack; off disables all source drivers."`
+	Sources []EventSourceConfig `yaml:"sources,omitempty" doc:"Ordered list of event sources to ingest from."`
+}
+
+// EventSourceConfig declares one event source: how to read from it,
+// how to parse each record, how to filter, how to extract fields,
+// and how to render a human-readable summary.
+type EventSourceConfig struct {
+	Name     string        `yaml:"name"               doc:"Logical source name; must be unique across all sources."`
+	Driver   string        `yaml:"driver"             doc:"Ingestion driver: file_tail or docker_logs."`
+	Interval time.Duration `yaml:"interval,omitempty" doc:"How often to poll for new records; 0 uses the driver default."`
+	From     string        `yaml:"from,omitempty"     doc:"Where to start reading: \"beginning\" or \"end\" (default end)."`
+
+	// file_tail driver fields.
+	Path string `yaml:"path,omitempty" doc:"Filesystem path of the log file; required for file_tail driver."`
+
+	// docker_logs driver fields.
+	Container string `yaml:"container,omitempty" doc:"Docker container name or ID to tail; required for docker_logs driver."`
+
+	Format  string        `yaml:"format"             doc:"Record parser: json, regex, or plain."`
+	Pattern string        `yaml:"pattern,omitempty"  doc:"RE2 regular expression with named groups; required when format=regex."`
+	Match   []MatchRule   `yaml:"match,omitempty"    doc:"Optional filter rules; all must match for the record to be ingested."`
+	Mapping MappingConfig `yaml:"mapping"            doc:"Field extractors that map parsed record fields to an Event."`
+	Render  string        `yaml:"render,omitempty"   doc:"Go text/template string rendered into Event.Summary; receives the parsed record as data."`
+}
+
+// MatchRule is one entry in EventSourceConfig.Match. Exactly one of
+// Equals or Contains must be set.
+type MatchRule struct {
+	Field    string `yaml:"field"              doc:"Name of the parsed record field to test."`
+	Equals   string `yaml:"equals,omitempty"   doc:"Record field must equal this value exactly."`
+	Contains string `yaml:"contains,omitempty" doc:"Record field must contain this substring."`
+}
+
+// MappingConfig declares the JSONPath ($.a.b) or literal extractors
+// that turn a parsed record into an Event.
+type MappingConfig struct {
+	TS      string            `yaml:"ts,omitempty"      doc:"JSONPath or field name of the timestamp field; omit to use ingest time."`
+	Kind    string            `yaml:"kind"              doc:"Literal event kind or JSONPath expression; required."`
+	Payload map[string]string `yaml:"payload,omitempty" doc:"Key→JSONPath/literal map of extra fields stored in the event payload."`
 }
 
 // AlertRule is the simplest possible threshold rule: when expression

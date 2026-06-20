@@ -316,3 +316,72 @@ targets:
 		t.Fatal("want missing-ca-file error")
 	}
 }
+
+// TestLoadEvents_Minimal asserts a minimal events block with one
+// file_tail source parses, validates and round-trips.
+func TestLoadEvents_Minimal(t *testing.T) {
+	data := []byte(`
+listen: 127.0.0.1:9090
+storage:
+  path: /tmp/owl.db
+  retention: { time: 7d, size: 0, interval: 1m }
+scrape: { default_interval: 30s, default_timeout: 10s }
+events:
+  enabled: true
+  sources:
+    - name: access
+      driver: file_tail
+      path: /var/log/nginx/access.log
+      from: end
+      interval: 30s
+      format: regex
+      pattern: '^(?P<ip>\S+).*$'
+      mapping:
+        kind: hit
+        payload: { ip: "$.ip" }
+      render: "hit from {{.ip}}"
+`)
+	c, err := LoadBytes(data)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if !c.Events.Enabled {
+		t.Fatal("enabled false")
+	}
+	if len(c.Events.Sources) != 1 || c.Events.Sources[0].Driver != "file_tail" {
+		t.Fatalf("sources: %#v", c.Events.Sources)
+	}
+}
+
+// TestLoadEvents_BadDriver asserts validation rejects unknown drivers.
+func TestLoadEvents_BadDriver(t *testing.T) {
+	data := []byte(`
+listen: 127.0.0.1:9090
+storage: { path: /tmp/owl.db, retention: { time: 7d, size: 0, interval: 1m } }
+scrape: { default_interval: 30s, default_timeout: 10s }
+events:
+  enabled: true
+  sources:
+    - { name: x, driver: journald, format: plain, mapping: { kind: k } }
+`)
+	if _, err := LoadBytes(data); err == nil {
+		t.Fatal("want validation error, got nil")
+	}
+}
+
+// TestLoadEvents_DockerLogsRequiresContainer asserts the
+// driver-specific required field check.
+func TestLoadEvents_DockerLogsRequiresContainer(t *testing.T) {
+	data := []byte(`
+listen: 127.0.0.1:9090
+storage: { path: /tmp/owl.db, retention: { time: 7d, size: 0, interval: 1m } }
+scrape: { default_interval: 30s, default_timeout: 10s }
+events:
+  enabled: true
+  sources:
+    - { name: w, driver: docker_logs, format: json, mapping: { kind: k } }
+`)
+	if _, err := LoadBytes(data); err == nil {
+		t.Fatal("want error about missing container")
+	}
+}

@@ -46,5 +46,8 @@ func Default() Config {
 			Watch:         false,
 			WatchInterval: 5 * time.Second,
 		},
+		Events: EventsConfig{
+			Enabled: false,
+		},
 	}
 }

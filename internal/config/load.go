@@ -127,6 +127,9 @@ func Validate(c *Config) error {
 			return err
 		}
 	}
+	if err := validateEvents(c); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -212,6 +215,63 @@ func parseSize(s string) (int64, error) {
 		}
 	}
 	return strconv.ParseInt(s, 10, 64)
+}
+
+// validateEvents enforces semantic invariants on EventsConfig: each
+// source must have a name, a recognised driver, a recognised format,
+// the driver-specific required fields, and (when format=regex) a
+// compilable pattern with at least one named group.
+func validateEvents(c *Config) error {
+	if !c.Events.Enabled {
+		return nil
+	}
+	seen := map[string]bool{}
+	for i, src := range c.Events.Sources {
+		if src.Name == "" {
+			return fmt.Errorf("events.sources[%d]: name is required", i)
+		}
+		if seen[src.Name] {
+			return fmt.Errorf("events.sources[%d]: duplicate name %q", i, src.Name)
+		}
+		seen[src.Name] = true
+		switch src.Driver {
+		case "file_tail":
+			if src.Path == "" {
+				return fmt.Errorf("events.sources[%d] (%s): file_tail driver requires path", i, src.Name)
+			}
+		case "docker_logs":
+			if src.Container == "" {
+				return fmt.Errorf("events.sources[%d] (%s): docker_logs driver requires container", i, src.Name)
+			}
+		default:
+			return fmt.Errorf("events.sources[%d] (%s): unknown driver %q (want file_tail or docker_logs)", i, src.Name, src.Driver)
+		}
+		switch src.Format {
+		case "json", "regex", "plain":
+		default:
+			return fmt.Errorf("events.sources[%d] (%s): unknown format %q (want json, regex or plain)", i, src.Name, src.Format)
+		}
+		if src.Format == "regex" {
+			if src.Pattern == "" {
+				return fmt.Errorf("events.sources[%d] (%s): format=regex requires pattern", i, src.Name)
+			}
+			if _, err := regexp.Compile(src.Pattern); err != nil {
+				return fmt.Errorf("events.sources[%d] (%s): pattern: %w", i, src.Name, err)
+			}
+		}
+		if src.Mapping.Kind == "" {
+			return fmt.Errorf("events.sources[%d] (%s): mapping.kind is required", i, src.Name)
+		}
+		for j, m := range src.Match {
+			if m.Field == "" {
+				return fmt.Errorf("events.sources[%d] (%s): match[%d].field is required", i, src.Name, j)
+			}
+			if (m.Equals == "") == (m.Contains == "") {
+				return fmt.Errorf("events.sources[%d] (%s): match[%d] requires exactly one of equals or contains", i, src.Name, j)
+			}
+		}
+	}
+	return nil
 }
 
 // validateAuth enforces the cross-field rules on a target's optional
