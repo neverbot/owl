@@ -388,6 +388,12 @@ func run(cfg config.Config, configPath string) error {
 			Containers: containersAdapter{docker: dockerCol},
 			Alerter:    alerter,
 			OnReload:   reload,
+			Events: func() web.EventsQuerier {
+				if eventsMgr == nil {
+					return nil
+				}
+				return events.NewStore(store.DB())
+			}(),
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 	}

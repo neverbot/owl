@@ -14,6 +14,7 @@ import (
 	"github.com/neverbot/owl/internal/alert"
 	"github.com/neverbot/owl/internal/dashboards"
 	"github.com/neverbot/owl/internal/design"
+	"github.com/neverbot/owl/internal/events"
 	"github.com/neverbot/owl/internal/query"
 	"github.com/neverbot/owl/internal/scrape"
 	"github.com/neverbot/owl/internal/storage"
@@ -51,6 +52,16 @@ type Options struct {
 	// dashboards directory and swapping them in atomically. If
 	// OnReload is nil, /-/reload returns 503 with a clear message.
 	OnReload func() error
+	// Events exposes the events store for /api/events. nil disables
+	// the endpoint (returns 503).
+	Events EventsQuerier
+}
+
+// EventsQuerier is the slice of *events.Store the web layer needs.
+// Defined as an interface so tests can plug a fake without touching
+// the SQLite store.
+type EventsQuerier interface {
+	QueryEvents(events.EventFilter) ([]events.Event, error)
 }
 
 // ScrapeHealth is the slice of scrape.Manager the web layer needs.
@@ -148,6 +159,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/metrics", s.metrics)
 	s.mux.HandleFunc("/api/query", s.apiQuery)
 	s.mux.HandleFunc("/api/range", s.apiRange)
+	s.mux.HandleFunc("/api/events", s.apiEvents)
 	s.mux.HandleFunc("/api/dashboards/", s.apiDashboardByID)
 	s.mux.HandleFunc("/api/dashboards", s.apiDashboards)
 	s.mux.HandleFunc("/api/targets", s.apiTargets)
