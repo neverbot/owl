@@ -965,24 +965,28 @@
   function refreshEvents(panel) {
     var staticSrc = panel.dataset.static;
     var url;
+    var raw;
+    var targets;
+    var qs;
+    var now;
     if (staticSrc) {
       // Docs/preview path: ignore the (decorative) filter args and
       // serve the fixture envelope directly.
       url = staticSrc;
     } else {
-      var raw = panel.getAttribute('data-event-targets') || '[]';
-      var targets = [];
+      raw = panel.getAttribute('data-event-targets') || '[]';
+      targets = [];
       try {
         targets = JSON.parse(raw);
       } catch (_e) {
         targets = [];
       }
-      var qs = ['limit=50'];
+      qs = ['limit=50'];
       targets.forEach((t) => {
         if (t.source) qs.push('source=' + encodeURIComponent(t.source));
         if (t.kind) qs.push('kind=' + encodeURIComponent(t.kind));
       });
-      var now = effectiveTo();
+      now = effectiveTo();
       qs.push('from=' + (now - currentWindowMs()));
       qs.push('to=' + now);
       url = '/api/events?' + qs.join('&');
@@ -1036,19 +1040,22 @@
   function drawAnnotations(panel, svg, fromMS, toMS) {
     var staticSrc = panel.dataset.annotationsStatic;
     var url;
+    var raw;
+    var anns;
+    var qs;
     if (staticSrc) {
       url = staticSrc;
     } else {
-      var raw = panel.getAttribute('data-annotations');
+      raw = panel.getAttribute('data-annotations');
       if (!raw) return;
-      var anns = [];
+      anns = [];
       try {
         anns = JSON.parse(raw);
       } catch (_e) {
         return;
       }
       if (!Array.isArray(anns) || anns.length === 0) return;
-      var qs = ['limit=200', 'from=' + fromMS, 'to=' + toMS];
+      qs = ['limit=200', 'from=' + fromMS, 'to=' + toMS];
       anns.forEach((a) => {
         if (a.source) qs.push('source=' + encodeURIComponent(a.source));
         if (a.kind) qs.push('kind=' + encodeURIComponent(a.kind));
