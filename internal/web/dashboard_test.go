@@ -261,3 +261,29 @@ func TestBuildDashboardDataEventsPanel(t *testing.T) {
 		t.Fatalf("EventTargetsJSON=%q", data.Panels[0].EventTargetsJSON)
 	}
 }
+
+// TestBuildDashboardData_EmptyAnnotationsEmitEmptyString asserts a
+// panel without annotations emits "" (not "null") so the template
+// can skip the data-annotations attribute. Regression: emitting
+// "null" made drawAnnotations throw on null.length and silently
+// swallowed the renderLegend call that runs right after.
+func TestBuildDashboardData_EmptyAnnotationsEmitEmptyString(t *testing.T) {
+	d := &dashboards.Dashboard{
+		Title: "x",
+		Panels: []dashboards.Panel{{
+			ID:      "1",
+			Type:    "timeseries",
+			Title:   "ts",
+			GridPos: dashboards.GridPos{W: 12, H: 8},
+			Targets: []dashboards.Target{{Expr: "up"}},
+			Support: dashboards.PanelSupport{Status: "supported"},
+		}},
+	}
+	data := buildDashboardData(d)
+	if got := data.Panels[0].AnnotationsJSON; got != "" {
+		t.Fatalf("AnnotationsJSON=%q, want empty string", got)
+	}
+	if got := data.Panels[0].EventTargetsJSON; got != "" {
+		t.Fatalf("EventTargetsJSON=%q, want empty string", got)
+	}
+}

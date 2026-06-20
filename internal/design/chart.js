@@ -1030,7 +1030,7 @@
     } catch (_e) {
       return;
     }
-    if (!anns.length) return;
+    if (!Array.isArray(anns) || anns.length === 0) return;
     var qs = ['limit=200', 'from=' + fromMS, 'to=' + toMS];
     anns.forEach((a) => {
       if (a.source) qs.push('source=' + encodeURIComponent(a.source));

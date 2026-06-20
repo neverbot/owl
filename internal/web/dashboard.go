@@ -102,8 +102,19 @@ func buildDashboardData(d *dashboards.Dashboard) dashboardTemplateData {
 		}
 		// json.Marshal of []EventTarget / []Annotation cannot fail in practice —
 		// both element structs are flat string pairs — so we drop the errors.
-		evTargets, _ := json.Marshal(p.EventTargets)
-		anns, _ := json.Marshal(p.Annotations)
+		// Empty slices marshal to "null", which the client treats as an
+		// opt-in signal; emit "" instead so the template's {{if}} skips
+		// the attribute entirely for panels with no annotations.
+		evTargetsJSON := ""
+		if len(p.EventTargets) > 0 {
+			b, _ := json.Marshal(p.EventTargets)
+			evTargetsJSON = string(b)
+		}
+		annsJSON := ""
+		if len(p.Annotations) > 0 {
+			b, _ := json.Marshal(p.Annotations)
+			annsJSON = string(b)
+		}
 		panels = append(panels, panelTemplateData{
 			ID:               p.ID,
 			Title:            p.Title,
@@ -116,8 +127,8 @@ func buildDashboardData(d *dashboards.Dashboard) dashboardTemplateData {
 			Decimals:         decimals,
 			GraphMode:        p.GraphMode,
 			IsEvents:         p.Type == "events",
-			EventTargetsJSON: string(evTargets),
-			AnnotationsJSON:  string(anns),
+			EventTargetsJSON: evTargetsJSON,
+			AnnotationsJSON:  annsJSON,
 			ColStart:         p.GridPos.X + 1,
 			ColSpan:          p.GridPos.W,
 			RowStart:         p.GridPos.Y + 1,
