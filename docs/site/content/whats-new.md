@@ -10,6 +10,15 @@ rolling `:latest` tag is updated on every push to master. Anything
 that changes default behaviour, adds a config knob, or removes a
 feature shows up here.
 
+## 2026-06-20
+
+- **Events.** Owl gains a second data type alongside numeric
+  samples: discrete events with structured payload. Two drivers
+  in v1 (`file_tail`, `docker_logs`), a new tabular events panel,
+  and vertical annotations on timeseries panels. Opt-in via
+  `events.enabled: true`. See [Events](/operating/events/) for the
+  full reference.
+
 ## 2026-06-18
 
 - **Authenticated scrape targets.** Per-target `auth` block supporting
