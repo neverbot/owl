@@ -78,7 +78,7 @@
     <section class="panel-grid">
       {{range .Panels}}
       <article
-        class="panel{{if eq .Status "unsupported"}} panel--unsupported{{end}}{{if .IsStat}} panel--stat{{end}}"
+        class="panel{{if eq .Status "unsupported"}} panel--unsupported{{end}}{{if .IsStat}} panel--stat{{end}}{{if .IsEvents}} panel--events{{end}}"
         data-panel-id="{{.ID}}"
         data-queries='{{.Queries}}'
         data-refresh="{{$.RefreshMS}}"
@@ -86,6 +86,8 @@
         data-status="{{.Status}}"
         data-reason="{{.Reason}}"
         {{if .IsStat}}data-calc="{{.Calc}}" data-decimals="{{.Decimals}}" data-graph-mode="{{.GraphMode}}"{{end}}
+        {{if .IsEvents}}data-event-targets='{{.EventTargetsJSON}}'{{end}}
+        {{if .AnnotationsJSON}}data-annotations='{{.AnnotationsJSON}}'{{end}}
         style="grid-column:{{.ColStart}}/span {{.ColSpan}};grid-row:{{.RowStart}}/span {{.RowSpan}}">
         <header class="panel__header">
           <h2 class="panel__title">{{.Title}}</h2>
@@ -93,6 +95,13 @@
         </header>
         {{if eq .Status "unsupported"}}
         <p class="panel__notice"><strong>Unsupported query.</strong> {{.Reason}}</p>
+        {{else if .IsEvents}}
+        <div class="panel__events">
+          <table>
+            <thead><tr><th>time</th><th>source / kind</th><th>event</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
         {{else if .IsStat}}
         <div class="panel__stat">
           <span class="panel__stat-value panel__stat-value--placeholder">—</span>

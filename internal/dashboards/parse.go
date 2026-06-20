@@ -23,13 +23,14 @@ type grafanaTime struct {
 
 type grafanaPanel struct {
 	// ID may be an integer or a string in Grafana JSON.
-	ID          json.RawMessage `json:"id"`
-	Type        string          `json:"type"`
-	Title       string          `json:"title"`
-	GridPos     grafanaGridPos  `json:"gridPos"`
-	FieldConfig grafanaFieldCfg `json:"fieldConfig"`
-	Options     grafanaOptions  `json:"options"`
-	Targets     []grafanaTarget `json:"targets"`
+	ID          json.RawMessage      `json:"id"`
+	Type        string               `json:"type"`
+	Title       string               `json:"title"`
+	GridPos     grafanaGridPos       `json:"gridPos"`
+	FieldConfig grafanaFieldCfg      `json:"fieldConfig"`
+	Options     grafanaOptions       `json:"options"`
+	Targets     []grafanaTarget      `json:"targets"`
+	Annotations []grafanaAnnotation  `json:"annotations"`
 }
 
 type grafanaGridPos struct {
@@ -61,6 +62,15 @@ type grafanaTarget struct {
 	Expr         string `json:"expr"`
 	LegendFormat string `json:"legendFormat"`
 	RefID        string `json:"refId"`
+	Source       string `json:"source"`
+	Kind         string `json:"kind"`
+}
+
+// grafanaAnnotation is a single entry in a panel's annotations array.
+// Owl uses source and kind to filter which events are overlaid on the chart.
+type grafanaAnnotation struct {
+	Source string `json:"source"`
+	Kind   string `json:"kind"`
 }
 
 // ParseDashboard parses a Grafana-format dashboard JSON byte slice into an
@@ -106,6 +116,14 @@ func ParseDashboard(id string, data []byte) (*Dashboard, error) {
 				LegendFormat: gt.LegendFormat,
 				RefID:        gt.RefID,
 			})
+		}
+		for _, ann := range gp.Annotations {
+			p.Annotations = append(p.Annotations, Annotation{Source: ann.Source, Kind: ann.Kind})
+		}
+		if gp.Type == "events" {
+			for _, gt := range gp.Targets {
+				p.EventTargets = append(p.EventTargets, EventTarget{Source: gt.Source, Kind: gt.Kind})
+			}
 		}
 		d.Panels = append(d.Panels, p)
 	}

@@ -26,20 +26,23 @@ type panelQuery struct {
 
 // panelTemplateData is one row in the panel grid for the template.
 type panelTemplateData struct {
-	ID        string
-	Title     string
-	Queries   string // JSON-encoded [{expr, legend}, ...] in targets[] order
-	Unit      string
-	Status    string
-	Reason    string
-	IsStat    bool   // true for stat or gauge panels — template emits .panel__stat
-	Calc      string // reduction operator; empty when IsStat is false
-	Decimals  string // decimal places as decimal string, or "" when unset
-	GraphMode string // "area" turns on the sparkline; empty/none disables it
-	ColStart  int
-	ColSpan   int
-	RowStart  int
-	RowSpan   int
+	ID              string
+	Title           string
+	Queries         string // JSON-encoded [{expr, legend}, ...] in targets[] order
+	Unit            string
+	Status          string
+	Reason          string
+	IsStat          bool   // true for stat or gauge panels — template emits .panel__stat
+	Calc            string // reduction operator; empty when IsStat is false
+	Decimals        string // decimal places as decimal string, or "" when unset
+	GraphMode       string // "area" turns on the sparkline; empty/none disables it
+	IsEvents        bool   // true for events panels — template emits .panel__events table
+	EventTargetsJSON string // JSON-encoded [{source,kind},...] for events panels
+	AnnotationsJSON  string // JSON-encoded [{source,kind},...] overlaid on timeseries panels
+	ColStart        int
+	ColSpan         int
+	RowStart        int
+	RowSpan         int
 }
 
 // dashboardView handles GET /d/{id}.
@@ -97,21 +100,28 @@ func buildDashboardData(d *dashboards.Dashboard) dashboardTemplateData {
 		if p.Decimals != nil {
 			decimals = strconv.Itoa(*p.Decimals)
 		}
+		// json.Marshal of []EventTarget / []Annotation cannot fail in practice —
+		// both element structs are flat string pairs — so we drop the errors.
+		evTargets, _ := json.Marshal(p.EventTargets)
+		anns, _ := json.Marshal(p.Annotations)
 		panels = append(panels, panelTemplateData{
-			ID:        p.ID,
-			Title:     p.Title,
-			Queries:   string(qjson),
-			Unit:      p.Unit,
-			Status:    p.Support.Status,
-			Reason:    p.Support.Reason,
-			IsStat:    p.Type == "stat" || p.Type == "gauge",
-			Calc:      p.Calc,
-			Decimals:  decimals,
-			GraphMode: p.GraphMode,
-			ColStart:  p.GridPos.X + 1,
-			ColSpan:   p.GridPos.W,
-			RowStart:  p.GridPos.Y + 1,
-			RowSpan:   p.GridPos.H,
+			ID:              p.ID,
+			Title:           p.Title,
+			Queries:         string(qjson),
+			Unit:            p.Unit,
+			Status:          p.Support.Status,
+			Reason:          p.Support.Reason,
+			IsStat:          p.Type == "stat" || p.Type == "gauge",
+			Calc:            p.Calc,
+			Decimals:        decimals,
+			GraphMode:       p.GraphMode,
+			IsEvents:        p.Type == "events",
+			EventTargetsJSON: string(evTargets),
+			AnnotationsJSON:  string(anns),
+			ColStart:        p.GridPos.X + 1,
+			ColSpan:         p.GridPos.W,
+			RowStart:        p.GridPos.Y + 1,
+			RowSpan:         p.GridPos.H,
 		})
 	}
 

@@ -25,18 +25,35 @@ type Dashboard struct {
 	Source  string        // absolute path of the source JSON file
 }
 
+// EventTarget filters the events shown in an events-type panel.
+// An empty target list means "all events in the window".
+type EventTarget struct {
+	Source string
+	Kind   string
+}
+
+// Annotation is one filter on a timeseries panel's annotations
+// field. Multiple annotations are OR'd at render time on the
+// client.
+type Annotation struct {
+	Source string
+	Kind   string
+}
+
 // Panel is one panel extracted from a Grafana dashboard.
 type Panel struct {
-	ID        string // Grafana panel id coerced to string
-	Title     string
-	Type      string // raw type from JSON ("timeseries", "stat", "gauge", or other)
-	GridPos   GridPos
-	Targets   []Target
-	Unit      string       // fieldConfig.defaults.unit
-	Decimals  *int         // fieldConfig.defaults.decimals; nil when unset
-	Calc      string       // options.reduceOptions.calcs[0]; "lastNotNull" when unset
-	GraphMode string       // options.graphMode; "" when unset (no sparkline)
-	Support   PanelSupport // result of consulting Capabilities
+	ID           string       // Grafana panel id coerced to string
+	Title        string
+	Type         string // raw type from JSON ("timeseries", "stat", "gauge", "events", or other)
+	GridPos      GridPos
+	Targets      []Target
+	Unit         string       // fieldConfig.defaults.unit
+	Decimals     *int         // fieldConfig.defaults.decimals; nil when unset
+	Calc         string       // options.reduceOptions.calcs[0]; "lastNotNull" when unset
+	GraphMode    string       // options.graphMode; "" when unset (no sparkline)
+	Support      PanelSupport // result of consulting Capabilities
+	EventTargets []EventTarget // panels of type=events; empty means all events in window
+	Annotations  []Annotation  // event overlays on timeseries panels
 }
 
 // GridPos holds the Grafana grid position of a panel.
@@ -71,4 +88,5 @@ var supportedPanelTypes = map[string]bool{
 	"timeseries": true,
 	"stat":       true,
 	"gauge":      true,
+	"events":     true,
 }

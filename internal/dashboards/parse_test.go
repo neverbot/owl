@@ -298,3 +298,33 @@ func TestParse_StatGraphModeNone(t *testing.T) {
 		t.Errorf("GraphMode = %q, want none", d.Panels[0].GraphMode)
 	}
 }
+
+// TestParseDashboardEventsAndAnnotations covers the events panel
+// type and the annotations field on timeseries panels.
+func TestParseDashboardEventsAndAnnotations(t *testing.T) {
+	raw := []byte(`{
+      "title": "x",
+      "panels": [
+        {"id": 1, "type": "events", "title": "ev",
+         "gridPos": {"x":0,"y":0,"w":24,"h":8},
+         "targets": [{"source":"a","kind":"k"}]},
+        {"id": 2, "type": "timeseries", "title": "ts",
+         "gridPos": {"x":0,"y":8,"w":24,"h":8},
+         "targets": [{"refId":"A","expr":"up"}],
+         "annotations": [{"source":"a","kind":"k"}]}
+      ]
+    }`)
+	d, err := ParseDashboard("x", raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Panels[0].Type != "events" {
+		t.Fatalf("type=%q", d.Panels[0].Type)
+	}
+	if len(d.Panels[0].EventTargets) != 1 || d.Panels[0].EventTargets[0].Source != "a" {
+		t.Fatalf("event targets=%#v", d.Panels[0].EventTargets)
+	}
+	if len(d.Panels[1].Annotations) != 1 || d.Panels[1].Annotations[0].Source != "a" {
+		t.Fatalf("annotations=%#v", d.Panels[1].Annotations)
+	}
+}

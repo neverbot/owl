@@ -238,3 +238,26 @@ func TestBuildDashboardData_NoTargetsEmitsEmptyArray(t *testing.T) {
 		t.Errorf("Queries = %q, want %q", got.Panels[0].Queries, "[]")
 	}
 }
+
+// TestBuildDashboardDataEventsPanel asserts an events panel emits
+// IsEvents=true and a populated EventTargetsJSON.
+func TestBuildDashboardDataEventsPanel(t *testing.T) {
+	d := &dashboards.Dashboard{
+		Title: "x",
+		Panels: []dashboards.Panel{{
+			ID:    "1",
+			Type:  "events",
+			Title: "ev",
+			GridPos: dashboards.GridPos{W: 24, H: 8},
+			EventTargets: []dashboards.EventTarget{{Source: "a", Kind: "k"}},
+			Support: dashboards.PanelSupport{Status: "supported"},
+		}},
+	}
+	data := buildDashboardData(d)
+	if !data.Panels[0].IsEvents {
+		t.Fatal("IsEvents false")
+	}
+	if data.Panels[0].EventTargetsJSON == "" || data.Panels[0].EventTargetsJSON == "null" {
+		t.Fatalf("EventTargetsJSON=%q", data.Panels[0].EventTargetsJSON)
+	}
+}
