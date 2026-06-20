@@ -56,7 +56,11 @@ func referencedFixtureList() []string {
 // the runtime and docs paths share the same legend-resolution logic.
 //
 // Required args: fixture (registered name in fixtures.go).
-// Optional args: expr (decorative query label), unit, title, legend.
+// Optional args: expr (decorative query label), unit, title, legend,
+//
+//	annotations (name of an events fixture to overlay as vertical
+//	  marks; the same fixture can be reused by an {{> events}}
+//	  invocation on the same page).
 func chartPartial(args map[string]string) (string, error) {
 	name := args["fixture"]
 	if name == "" {
@@ -79,8 +83,16 @@ func chartPartial(args map[string]string) (string, error) {
 		Expr:   args["expr"],
 		Legend: args["legend"],
 	}})
+	annotationsAttr := ""
+	if annName := args["annotations"]; annName != "" {
+		if _, ok := LookupFixture(annName); !ok {
+			return "", fmt.Errorf("chart: unknown annotations fixture %q", annName)
+		}
+		referenceFixture(annName)
+		annotationsAttr = fmt.Sprintf(` data-annotations-static=%q`, withBase("/data/"+annName+".json"))
+	}
 	return fmt.Sprintf(
-		`<article class="panel" data-static=%q data-queries='%s' data-unit=%q data-refresh="0">
+		`<article class="panel" data-static=%q data-queries='%s' data-unit=%q data-refresh="0"%s>
   <header class="panel__header">
     <h2 class="panel__title">%s</h2>
     %s
@@ -91,7 +103,7 @@ func chartPartial(args map[string]string) (string, error) {
     <div class="panel__legend"></div>
   </footer>
 </article>`,
-		withBase("/data/"+name+".json"), queries, unit, title, unitMarkup, title), nil
+		withBase("/data/"+name+".json"), queries, unit, annotationsAttr, title, unitMarkup, title), nil
 }
 
 // chartQuery mirrors the {expr, legend} pair the dashboard template

@@ -8,10 +8,15 @@ import (
 	"sort"
 )
 
-// Fixture is the JSON shape chart.js expects from /api/query (and now
-// also from a static file via data-static).
+// Fixture is the JSON shape chart.js expects from /api/query and
+// /api/events (and now also from a static file via data-static).
+// Series and Events are independent envelopes — a chart fixture sets
+// Series, an events fixture sets Events; the matching omitempty tag
+// keeps the unused side out of the JSON output so consumers can tell
+// them apart by which key is present.
 type Fixture struct {
-	Series []FixtureSeries `json:"series"`
+	Series []FixtureSeries `json:"series,omitempty"`
+	Events []FixtureEvent  `json:"events,omitempty"`
 }
 
 // FixtureSeries is one labelled time series. The wire shape matches
@@ -21,6 +26,19 @@ type FixtureSeries struct {
 	Metric string            `json:"metric"`
 	Labels map[string]string `json:"labels"`
 	Points []FixturePoint    `json:"points"`
+}
+
+// FixtureEvent is one discrete event entry. The wire shape matches
+// the runtime /api/events JSON response (an items-of-events array)
+// so chart.js's events panel and annotation overlay consume static
+// fixtures without branching.
+type FixtureEvent struct {
+	ID      string         `json:"id"`
+	TS      int64          `json:"ts"`
+	Source  string         `json:"source"`
+	Kind    string         `json:"kind"`
+	Payload map[string]any `json:"payload"`
+	Render  string         `json:"render"`
 }
 
 // FixturePoint is one (timestamp-ms, value) pair. It marshals as a
@@ -49,6 +67,7 @@ var fixtures = map[string]func() Fixture{
 	"container-memory":     containerMemory,
 	"stat-alerts-firing":   statAlertsFiring,
 	"stat-load1-sparkline": statLoad1Sparkline,
+	"events-watchtower":    eventsWatchtower,
 }
 
 // FixtureNames returns every registered fixture name, sorted.
@@ -391,6 +410,38 @@ func statAlertsFiring() Fixture {
 		Labels: map[string]string{},
 		Points: pointsFor(vals, 30),
 	}}}
+}
+
+// eventsWatchtower synthesises a short timeline of watchtower
+// image-update events — the kind of activity a small self-hosted
+// cluster sees from regular auto-updates. Four events are spaced
+// across the same 40-minute window as the host-cpu fixture so the
+// same data set can feed both the events table and the annotation
+// overlay on a chart. Newest first when sorted by ts descending
+// (the events table renderer reverses).
+func eventsWatchtower() Fixture {
+	return Fixture{Events: []FixtureEvent{
+		{
+			ID: "e1", TS: tsAt(12, 30), Source: "watchtower", Kind: "image-updated",
+			Payload: map[string]any{"container": "owl", "image": "ghcr.io/neverbot/owl:latest", "digest": "a1a85b79b2ce"},
+			Render:  "owl updated → ghcr.io/neverbot/owl:latest (a1a85b79b2ce)",
+		},
+		{
+			ID: "e2", TS: tsAt(30, 30), Source: "watchtower", Kind: "image-updated",
+			Payload: map[string]any{"container": "nottario", "image": "ghcr.io/neverbot/nottario:latest", "digest": "06b827716819"},
+			Render:  "nottario updated → ghcr.io/neverbot/nottario:latest (06b827716819)",
+		},
+		{
+			ID: "e3", TS: tsAt(50, 30), Source: "watchtower", Kind: "image-updated",
+			Payload: map[string]any{"container": "nottario", "image": "ghcr.io/neverbot/nottario:latest", "digest": "c555bdf7b83d"},
+			Render:  "nottario updated → ghcr.io/neverbot/nottario:latest (c555bdf7b83d)",
+		},
+		{
+			ID: "e4", TS: tsAt(70, 30), Source: "watchtower", Kind: "image-updated",
+			Payload: map[string]any{"container": "owl", "image": "ghcr.io/neverbot/owl:latest", "digest": "fd72346c1456"},
+			Render:  "owl updated → ghcr.io/neverbot/owl:latest (fd72346c1456)",
+		},
+	}}
 }
 
 // statLoad1Sparkline synthesises a load average series that wanders

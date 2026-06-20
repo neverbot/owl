@@ -963,22 +963,31 @@
   // client-side: at most 50 rows are mounted at once; vertical scroll
   // inside the panel handles overflow.
   function refreshEvents(panel) {
-    var raw = panel.getAttribute('data-event-targets') || '[]';
-    var targets = [];
-    try {
-      targets = JSON.parse(raw);
-    } catch (_e) {
-      targets = [];
+    var staticSrc = panel.dataset.static;
+    var url;
+    if (staticSrc) {
+      // Docs/preview path: ignore the (decorative) filter args and
+      // serve the fixture envelope directly.
+      url = staticSrc;
+    } else {
+      var raw = panel.getAttribute('data-event-targets') || '[]';
+      var targets = [];
+      try {
+        targets = JSON.parse(raw);
+      } catch (_e) {
+        targets = [];
+      }
+      var qs = ['limit=50'];
+      targets.forEach((t) => {
+        if (t.source) qs.push('source=' + encodeURIComponent(t.source));
+        if (t.kind) qs.push('kind=' + encodeURIComponent(t.kind));
+      });
+      var now = effectiveTo();
+      qs.push('from=' + (now - currentWindowMs()));
+      qs.push('to=' + now);
+      url = '/api/events?' + qs.join('&');
     }
-    var qs = ['limit=50'];
-    targets.forEach((t) => {
-      if (t.source) qs.push('source=' + encodeURIComponent(t.source));
-      if (t.kind) qs.push('kind=' + encodeURIComponent(t.kind));
-    });
-    var now = effectiveTo();
-    qs.push('from=' + (now - currentWindowMs()));
-    qs.push('to=' + now);
-    fetch('/api/events?' + qs.join('&'))
+    fetch(url)
       .then((r) => r.json())
       .then((body) => {
         var tbody = panel.querySelector('.panel__events tbody');
@@ -1020,23 +1029,33 @@
   // fetches matching events in the current window, and draws 1px
   // vertical lines behind the data line. fromMS and toMS are the
   // visible time window edges in unix milliseconds, matching the
-  // values used by the enclosing refreshPanel call.
+  // values used by the enclosing refreshPanel call. When
+  // data-annotations-static is set (docs/preview path), the events
+  // come from a fixture file instead of /api/events, and the
+  // declarative data-annotations filter is ignored.
   function drawAnnotations(panel, svg, fromMS, toMS) {
-    var raw = panel.getAttribute('data-annotations');
-    if (!raw) return;
-    var anns = [];
-    try {
-      anns = JSON.parse(raw);
-    } catch (_e) {
-      return;
+    var staticSrc = panel.dataset.annotationsStatic;
+    var url;
+    if (staticSrc) {
+      url = staticSrc;
+    } else {
+      var raw = panel.getAttribute('data-annotations');
+      if (!raw) return;
+      var anns = [];
+      try {
+        anns = JSON.parse(raw);
+      } catch (_e) {
+        return;
+      }
+      if (!Array.isArray(anns) || anns.length === 0) return;
+      var qs = ['limit=200', 'from=' + fromMS, 'to=' + toMS];
+      anns.forEach((a) => {
+        if (a.source) qs.push('source=' + encodeURIComponent(a.source));
+        if (a.kind) qs.push('kind=' + encodeURIComponent(a.kind));
+      });
+      url = '/api/events?' + qs.join('&');
     }
-    if (!Array.isArray(anns) || anns.length === 0) return;
-    var qs = ['limit=200', 'from=' + fromMS, 'to=' + toMS];
-    anns.forEach((a) => {
-      if (a.source) qs.push('source=' + encodeURIComponent(a.source));
-      if (a.kind) qs.push('kind=' + encodeURIComponent(a.kind));
-    });
-    fetch('/api/events?' + qs.join('&'))
+    fetch(url)
       .then((r) => r.json())
       .then((body) => {
         var prev = svg.querySelector('.panel__annot-group');
@@ -1149,7 +1168,22 @@
         const dom = staticSrc ? null : { from: from, to: to };
         if (svg) {
           renderChart(svg, merged, unit, dom);
-          if (!staticSrc) drawAnnotations(panel, svg, from, to);
+          if (!staticSrc) {
+            drawAnnotations(panel, svg, from, to);
+          } else if (panel.dataset.annotationsStatic) {
+            // Static (docs) path: derive the time window from the
+            // fixture's own points so annotation marks land inside
+            // the rendered chart range.
+            let lo = Infinity;
+            let hi = -Infinity;
+            for (const s of merged) {
+              for (const p of s.points) {
+                if (p[0] < lo) lo = p[0];
+                if (p[0] > hi) hi = p[0];
+              }
+            }
+            if (lo < hi) drawAnnotations(panel, svg, lo, hi);
+          }
         }
 
         const legendEl = panel.querySelector('.panel__legend');

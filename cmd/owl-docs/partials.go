@@ -25,41 +25,83 @@ func registerPartial(name string, fn PartialFunc) {
 	partialRegistry[name] = fn
 }
 
-// partialRE matches `{{> name key1=value1 key2="value with spaces"}}`
-// on a single line.
-var partialRE = regexp.MustCompile(`{{>\s*([A-Za-z][\w-]*)([^}]*)}}`)
+// partialNameRE captures the partial name immediately after `{{>`.
+var partialNameRE = regexp.MustCompile(`^{{>\s*([A-Za-z][\w-]*)`)
 
 // argRE matches one key=value or key="value" pair inside a partial invocation.
 var argRE = regexp.MustCompile(`([A-Za-z][\w-]*)=("([^"]*)"|(\S+))`)
 
 // expandPartials substitutes every {{> ...}} invocation in body with
-// the registered partial's output. Unknown partial names produce an
-// error.
+// the registered partial's output. The scan is brace-aware so a
+// nested `{{name}}` inside an argument value (e.g.
+// `legend="{{mode}}"`) does not prematurely close the invocation;
+// the matching `}}` is the one that brings the depth back to zero.
+// Unknown partial names produce an error.
 func expandPartials(body string) (string, error) {
-	var firstErr error
-	out := partialRE.ReplaceAllStringFunc(body, func(match string) string {
-		if firstErr != nil {
-			return match
+	var out strings.Builder
+	i := 0
+	for {
+		start := strings.Index(body[i:], "{{>")
+		if start < 0 {
+			out.WriteString(body[i:])
+			return out.String(), nil
 		}
-		parts := partialRE.FindStringSubmatch(match)
-		name, rawArgs := parts[1], parts[2]
+		out.WriteString(body[i : i+start])
+		absStart := i + start
+		end := findMatchingClose(body, absStart)
+		if end < 0 {
+			// Unbalanced — pass the rest through verbatim and stop
+			// looking for more partials.
+			out.WriteString(body[absStart:])
+			return out.String(), nil
+		}
+		match := body[absStart : end+2]
+		nameParts := partialNameRE.FindStringSubmatch(match)
+		if nameParts == nil {
+			out.WriteString(match)
+			i = end + 2
+			continue
+		}
+		name := nameParts[1]
 		fn, ok := partialRegistry[name]
 		if !ok {
-			firstErr = fmt.Errorf("unknown partial %q", name)
-			return match
+			return "", fmt.Errorf("unknown partial %q", name)
 		}
-		args := parseArgs(rawArgs)
-		got, err := fn(args)
+		// rawArgs is everything between the name and the closing }}.
+		rawArgs := match[len(nameParts[0]) : len(match)-2]
+		got, err := fn(parseArgs(rawArgs))
 		if err != nil {
-			firstErr = fmt.Errorf("partial %q: %w", name, err)
-			return match
+			return "", fmt.Errorf("partial %q: %w", name, err)
 		}
-		return got
-	})
-	if firstErr != nil {
-		return "", firstErr
+		out.WriteString(got)
+		i = end + 2
 	}
-	return out, nil
+}
+
+// findMatchingClose returns the byte offset of the `}}` that closes
+// the `{{>` at start. Returns -1 if no balanced close exists. Nested
+// `{{...}}` pairs (e.g. inside quoted argument values) are skipped:
+// every `{{` increments depth, every `}}` decrements; the close is
+// the one that brings depth back to zero.
+func findMatchingClose(s string, start int) int {
+	depth := 1
+	j := start + 3 // skip past `{{>`
+	for j < len(s)-1 {
+		switch {
+		case s[j] == '{' && s[j+1] == '{':
+			depth++
+			j += 2
+		case s[j] == '}' && s[j+1] == '}':
+			depth--
+			if depth == 0 {
+				return j
+			}
+			j += 2
+		default:
+			j++
+		}
+	}
+	return -1
 }
 
 // parseArgs extracts key=value pairs from a partial invocation tail,

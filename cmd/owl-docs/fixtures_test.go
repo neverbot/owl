@@ -20,8 +20,8 @@ func TestFixturesAreDeterministic(t *testing.T) {
 func TestFixturesAreNonEmpty(t *testing.T) {
 	for _, name := range FixtureNames() {
 		f, _ := LookupFixture(name)
-		if len(f.Series) == 0 {
-			t.Errorf("fixture %q has no series", name)
+		if len(f.Series) == 0 && len(f.Events) == 0 {
+			t.Errorf("fixture %q has neither series nor events", name)
 		}
 		for _, s := range f.Series {
 			if len(s.Points) == 0 {

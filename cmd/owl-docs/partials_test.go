@@ -39,6 +39,21 @@ func TestExpandPartialsPropagatesError(t *testing.T) {
 	}
 }
 
+func TestExpandPartialsNestedBraces(t *testing.T) {
+	registerPartial("capture", func(args map[string]string) (string, error) {
+		return "[" + args["legend"] + "|" + args["title"] + "]", nil
+	})
+	t.Cleanup(func() { delete(partialRegistry, "capture") })
+	got, err := expandPartials(`a {{> capture legend="{{mode}}" title="X"}} b`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `a [{{mode}}|X] b`
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
 var errSomething = errString("boom")
 
 type errString string

@@ -75,14 +75,24 @@ Cursor: RFC3339Nano timestamp of the last line seen. Requires the
 
 ## Panels
 
-- **events panel** (`"type": "events"`): tabular view, three
-  columns (time, source / kind, event). 50 rows per page with
-  scroll inside the panel. Empty `targets: []` means "all events
-  in the window".
-- **annotations on timeseries** (`"annotations": [{}]` on a
-  timeseries panel): 1px vertical lines drawn behind the data
-  line, coloured per source from the 12-slot palette, with a 6px
-  hover zone exposing the event's ts and render text.
+### events panel
+
+`"type": "events"` renders a tabular view with three columns (time,
+source / kind, event). 50 rows per page with scroll inside the
+panel. Empty `targets: []` means "all events in the window".
+
+{{> events fixture=events-watchtower title="Update events"}}
+
+### annotations on timeseries
+
+Any timeseries panel can declare an `annotations` array. Owl draws
+one thin vertical line behind the data line for each matching event,
+coloured per source from the 12-slot palette, with a hover zone that
+exposes the event's timestamp and render text. `"annotations": [{}]`
+means "all sources, all kinds"; per-source filters look like the
+events panel's `targets`.
+
+{{> chart fixture=host-cpu annotations=events-watchtower expr="sum by (mode) (rate(node_cpu_seconds_total[1m]))" legend="{{mode}}" unit=percent title="CPU usage with update overlay"}}
 
 ## Retention
 
