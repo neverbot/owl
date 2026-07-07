@@ -1194,7 +1194,7 @@
         }
 
         const legendEl = panel.querySelector('.panel__legend');
-        if (legendEl) renderLegend(legendEl, merged);
+        if (legendEl) renderLegend(legendEl, merged, panel);
 
         const valueEl = panel.querySelector('.panel__value');
         if (valueEl) {
@@ -1217,13 +1217,21 @@
       });
   }
 
-  function renderLegend(legendEl, seriesList) {
+  // renderLegend paints the per-series swatches beneath a multi-series
+  // panel. When a panel element is supplied, hovering a legend item
+  // stamps data-focus-slot on the panel so the CSS can dim the other
+  // series for quick visual isolation.
+  function renderLegend(legendEl, seriesList, panel) {
     clearChildren(legendEl);
-    if (seriesList.length <= 1) return;
+    if (seriesList.length <= 1) {
+      if (panel) delete panel.dataset.focusSlot;
+      return;
+    }
     for (let i = 0; i < seriesList.length; i++) {
       const slot = (i % SERIES_PALETTE_SIZE) + 1;
       const item = document.createElement('span');
       item.className = 'panel__legend-item';
+      item.dataset.slot = String(slot);
       const swatch = document.createElement('span');
       swatch.className = 'panel__legend-swatch';
       swatch.style.background = 'var(--series-' + slot + ')';
@@ -1231,6 +1239,14 @@
       const label = document.createElement('span');
       label.textContent = labelFor(seriesList[i]);
       item.appendChild(label);
+      if (panel) {
+        item.addEventListener('mouseenter', () => {
+          panel.dataset.focusSlot = String(slot);
+        });
+        item.addEventListener('mouseleave', () => {
+          delete panel.dataset.focusSlot;
+        });
+      }
       legendEl.appendChild(item);
     }
   }

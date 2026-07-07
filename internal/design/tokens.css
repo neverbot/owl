@@ -836,6 +836,56 @@ h3.page-title {
   width: 10px;
   height: 2px;
 }
+.panel__legend-item {
+  cursor: default;
+  transition: color 120ms var(--ease-out, ease-out);
+}
+.panel__legend-item:hover { color: var(--fg); }
+
+/* Legend hover focus: dim non-hovered series so the active one reads
+   clearly. Slot-specific rules restore full opacity for the match. */
+.panel[data-focus-slot] .panel__chart .series,
+.panel[data-focus-slot] .panel__chart .marker {
+  opacity: 0.18;
+  transition: opacity 120ms var(--ease-out, ease-out);
+}
+.panel[data-focus-slot] .panel__legend-item { opacity: 0.45; }
+.panel[data-focus-slot="1"]  .panel__legend-item[data-slot="1"],
+.panel[data-focus-slot="2"]  .panel__legend-item[data-slot="2"],
+.panel[data-focus-slot="3"]  .panel__legend-item[data-slot="3"],
+.panel[data-focus-slot="4"]  .panel__legend-item[data-slot="4"],
+.panel[data-focus-slot="5"]  .panel__legend-item[data-slot="5"],
+.panel[data-focus-slot="6"]  .panel__legend-item[data-slot="6"],
+.panel[data-focus-slot="7"]  .panel__legend-item[data-slot="7"],
+.panel[data-focus-slot="8"]  .panel__legend-item[data-slot="8"],
+.panel[data-focus-slot="9"]  .panel__legend-item[data-slot="9"],
+.panel[data-focus-slot="10"] .panel__legend-item[data-slot="10"],
+.panel[data-focus-slot="11"] .panel__legend-item[data-slot="11"],
+.panel[data-focus-slot="12"] .panel__legend-item[data-slot="12"] { opacity: 1; }
+.panel[data-focus-slot="1"]  .panel__chart .series--1,
+.panel[data-focus-slot="1"]  .panel__chart .marker--1,
+.panel[data-focus-slot="2"]  .panel__chart .series--2,
+.panel[data-focus-slot="2"]  .panel__chart .marker--2,
+.panel[data-focus-slot="3"]  .panel__chart .series--3,
+.panel[data-focus-slot="3"]  .panel__chart .marker--3,
+.panel[data-focus-slot="4"]  .panel__chart .series--4,
+.panel[data-focus-slot="4"]  .panel__chart .marker--4,
+.panel[data-focus-slot="5"]  .panel__chart .series--5,
+.panel[data-focus-slot="5"]  .panel__chart .marker--5,
+.panel[data-focus-slot="6"]  .panel__chart .series--6,
+.panel[data-focus-slot="6"]  .panel__chart .marker--6,
+.panel[data-focus-slot="7"]  .panel__chart .series--7,
+.panel[data-focus-slot="7"]  .panel__chart .marker--7,
+.panel[data-focus-slot="8"]  .panel__chart .series--8,
+.panel[data-focus-slot="8"]  .panel__chart .marker--8,
+.panel[data-focus-slot="9"]  .panel__chart .series--9,
+.panel[data-focus-slot="9"]  .panel__chart .marker--9,
+.panel[data-focus-slot="10"] .panel__chart .series--10,
+.panel[data-focus-slot="10"] .panel__chart .marker--10,
+.panel[data-focus-slot="11"] .panel__chart .series--11,
+.panel[data-focus-slot="11"] .panel__chart .marker--11,
+.panel[data-focus-slot="12"] .panel__chart .series--12,
+.panel[data-focus-slot="12"] .panel__chart .marker--12 { opacity: 1; }
 
 /* Unsupported / error panel state */
 .panel--unsupported {
