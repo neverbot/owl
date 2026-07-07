@@ -697,7 +697,9 @@
       for (let p = 0; p < pp.length; p++) {
         d += (p === 0 ? 'M' : 'L') + sx(pp[p][0]).toFixed(1) + ',' + sy(pp[p][1]).toFixed(1);
       }
-      svg.appendChild(el('path', { d: d, class: 'series series--' + slot }));
+      svg.appendChild(
+        el('path', { d: d, class: 'series series--' + slot, 'data-idx': String(s) }),
+      );
       const last = pp[pp.length - 1];
       svg.appendChild(
         el('circle', {
@@ -705,6 +707,7 @@
           cy: sy(last[1]).toFixed(1),
           r: 2,
           class: 'marker marker--' + slot,
+          'data-idx': String(s),
         }),
       );
     }
@@ -1219,19 +1222,32 @@
 
   // renderLegend paints the per-series swatches beneath a multi-series
   // panel. When a panel element is supplied, hovering a legend item
-  // stamps data-focus-slot on the panel so the CSS can dim the other
-  // series for quick visual isolation.
+  // isolates the matching series by dimming the others via the
+  // `is-dim` class on paths, markers, and other legend items. Isolation
+  // keys off the series index (data-idx), not the palette slot, so
+  // series that share a slot (>12 series) stay distinguishable.
   function renderLegend(legendEl, seriesList, panel) {
     clearChildren(legendEl);
+    const svg = panel ? panel.querySelector('.panel__chart') : null;
+    const clearFocus = () => {
+      if (svg) {
+        svg
+          .querySelectorAll('.series.is-dim, .marker.is-dim')
+          .forEach((n) => n.classList.remove('is-dim'));
+      }
+      legendEl
+        .querySelectorAll('.panel__legend-item.is-dim')
+        .forEach((n) => n.classList.remove('is-dim'));
+    };
     if (seriesList.length <= 1) {
-      if (panel) delete panel.dataset.focusSlot;
+      clearFocus();
       return;
     }
     for (let i = 0; i < seriesList.length; i++) {
       const slot = (i % SERIES_PALETTE_SIZE) + 1;
       const item = document.createElement('span');
       item.className = 'panel__legend-item';
-      item.dataset.slot = String(slot);
+      item.dataset.idx = String(i);
       const swatch = document.createElement('span');
       swatch.className = 'panel__legend-swatch';
       swatch.style.background = 'var(--series-' + slot + ')';
@@ -1241,11 +1257,17 @@
       item.appendChild(label);
       if (panel) {
         item.addEventListener('mouseenter', () => {
-          panel.dataset.focusSlot = String(slot);
+          const key = String(i);
+          if (svg) {
+            svg.querySelectorAll('.series[data-idx], .marker[data-idx]').forEach((n) => {
+              n.classList.toggle('is-dim', n.getAttribute('data-idx') !== key);
+            });
+          }
+          legendEl.querySelectorAll('.panel__legend-item').forEach((n) => {
+            n.classList.toggle('is-dim', n.dataset.idx !== key);
+          });
         });
-        item.addEventListener('mouseleave', () => {
-          delete panel.dataset.focusSlot;
-        });
+        item.addEventListener('mouseleave', clearFocus);
       }
       legendEl.appendChild(item);
     }
