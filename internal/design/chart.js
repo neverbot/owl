@@ -697,9 +697,7 @@
       for (let p = 0; p < pp.length; p++) {
         d += (p === 0 ? 'M' : 'L') + sx(pp[p][0]).toFixed(1) + ',' + sy(pp[p][1]).toFixed(1);
       }
-      svg.appendChild(
-        el('path', { d: d, class: 'series series--' + slot, 'data-idx': String(s) }),
-      );
+      svg.appendChild(el('path', { d: d, class: 'series series--' + slot, 'data-idx': String(s) }));
       const last = pp[pp.length - 1];
       svg.appendChild(
         el('circle', {
@@ -1231,13 +1229,13 @@
     const svg = panel ? panel.querySelector('.panel__chart') : null;
     const clearFocus = () => {
       if (svg) {
-        svg
-          .querySelectorAll('.series.is-dim, .marker.is-dim')
-          .forEach((n) => n.classList.remove('is-dim'));
+        svg.querySelectorAll('.series.is-dim, .marker.is-dim').forEach((n) => {
+          n.classList.remove('is-dim');
+        });
       }
-      legendEl
-        .querySelectorAll('.panel__legend-item.is-dim')
-        .forEach((n) => n.classList.remove('is-dim'));
+      legendEl.querySelectorAll('.panel__legend-item.is-dim').forEach((n) => {
+        n.classList.remove('is-dim');
+      });
     };
     if (seriesList.length <= 1) {
       clearFocus();
